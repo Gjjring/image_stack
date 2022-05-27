@@ -1,0 +1,30 @@
+# Compiled python modules.
+*.pyc
+
+# Setuptools distribution folder.
+/dist/
+
+#Config file with local path data
+config.yaml
+
+# Python egg metadata, regenerated from source files by setuptools.
+*.egg-info
+
+# personal notebooks
+/notebooks/personal
+
+# notebook checkpoints
+.ipynb_checkpoints
+
+# data files
+/data
+
+# built docu
+/docs/build
+
+# build dir
+/build
+
+_build
+_static
+_templates
