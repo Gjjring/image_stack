@@ -14,6 +14,10 @@ def create_model(model_name, plot):
     else:
         raise ValueError("invalid model name: {}".format(model_name))
 
+def _mask_z_and_data(window, center, z, data):
+    data = ma.masked_where(np.abs(z-center)>window, data).compressed()
+    z = ma.masked_where(np.abs(z-center)>window, z).compressed()
+    return data, z
 
 class FocalPlane():
 
@@ -25,14 +29,14 @@ class FocalPlane():
 
     def fit(self, fit_window=None, fit_center=None):
         if fit_window is not None:
-            data = ma.masked_where(np.abs(self.z-fit_center)>fit_window, self.data).compressed()
-            z = ma.masked_where(np.abs(self.z-fit_center)>fit_window, self.z).compressed()
+            data, z = _mask_z_and_data(fit_window, fit_center,
+                                            self.z, self.data)
         else:
             data = self.data
             z = self.z
         return self.model.fit_parameters(z, data)
 
-    def _evalulate_info_criterion(self, fit_window_width, criterion):
+    def _evaluate_info_criterion(self, fit_window_width, criterion):
         """
         evaluate the information criteria for the current model and fit window.
 
@@ -77,7 +81,7 @@ class FocalPlane():
         focal_pos0 = self.fit()[0]
         self.current_focus_estimate = focal_pos0
         criterion = InformationCriteria.BIC
-        obj_fun = lambda x : self._evalulate_info_criterion(x, criterion)
+        obj_fun = lambda x : self._evaluate_info_criterion(x, criterion)
         min_fit_window_width = z_range*0.2
         max_fit_window_width = z_range
         for iteration in range(iterations):
@@ -132,14 +136,15 @@ class GaussianModel(ModelBase):
     def __init__(self, plot):
         super().__init__(plot)
         self.__parameters = {}
-        self.n_parameters = 3
+        self.n_parameters = 4
 
     def _init_params(self, z, data):
-        a = np.max(data)
-        b = z[np.where(np.isclose(data,a))[0][0]]
+        a = np.max(data)-np.min(data)
+        b = z[np.where(np.isclose(data, np.max(data)))[0][0]]
         z_range = (z[-1]-z[0])
-        c = z_range*0.25
-        self.parameters = [a, b, c]
+        c = z_range*0.5
+        d = np.min(data)
+        self.parameters = [a, b, c, d]
 
     @property
     def parameters(self):
@@ -150,18 +155,20 @@ class GaussianModel(ModelBase):
         self.__parameters['a'] = params[0]
         self.__parameters['b'] = params[1]
         self.__parameters['c'] = params[2]
+        self.__parameters['d'] = params[3]
 
     def evaluate(self, z):
         a = self.parameters['a']
         b = self.parameters['b']
         c = self.parameters['c']
-        return utils.gaussian([a, b, c], z)
+        d = self.parameters['d']
+        return utils.gaussian([a, b, c], z) + d
 
     def get_bounds(self, z, data):
         z_range = z[-1]-z[0]
         bounds = []
-        bounds.append((-np.inf, np.min(z), -np.inf))
-        bounds.append((np.inf, np.max(z), z_range*0.5))
+        bounds.append((-np.inf, np.min(z), -np.inf, -np.max(data)))
+        bounds.append((np.inf, np.max(z), z_range*2, np.max(data)))
         return bounds
 
     def fit_parameters(self, z, data):
@@ -170,8 +177,8 @@ class GaussianModel(ModelBase):
         minimize_func = lambda x : self.residuals(x, z, data)
         bounds = self.get_bounds(z, data)
         res = scipy.optimize.least_squares(minimize_func,
-                                            method='dogbox',
-                                            loss='cauchy',
+                                            method='trf',
+                                            loss='linear',
                                             x0=start_vals,
                                             bounds=bounds)
 
@@ -191,7 +198,6 @@ class Polynomial(ModelBase):
 
     def _init_params(self, z, data):
         coeffs = np.polyfit(z, data, self.n_parameters)
-        #print(self.n_parameters, coeffs)
         self.parameters = coeffs
 
     @property
@@ -212,14 +218,18 @@ class Polynomial(ModelBase):
 
         return data
 
-    def _evalulate_info_criterion(self, order, z, data, criterion):
+    def _evaluate_info_criterion(self, order, z, data, criterion):
         """
         evaluate the information criteria for the current model and fit window.
 
         Parameters
         ----------
-        fit_window_width: float
-            width of fitting window
+        order: int or float
+            number of free model parameters
+        z: np.ndarray of floats
+            the z positions
+        data: np.ndarray of floats
+            the data evaluated at the z positions
         criterion: InformationCriteria Enum
             the information criteria to be minimized
         """
@@ -235,7 +245,7 @@ class Polynomial(ModelBase):
     def fit_parameters(self, z, data):
         self._init_params(z, data)
         criterion = InformationCriteria.BIC
-        obj_fun = lambda x : self._evalulate_info_criterion(x, z, data,
+        obj_fun = lambda x : self._evaluate_info_criterion(x, z, data,
                                                             criterion)
         min_order = 2
         max_order = 12
