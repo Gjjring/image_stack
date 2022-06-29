@@ -60,6 +60,26 @@ class Image2D(ImageBase):
         PHI = np.arctan2(Y, X)
         return R, PHI
 
+    def xlim(self):
+        X, Y = self.get_cart_dimensions()
+        if self.mask.current is not None:
+            x = np.unique(X[np.logical_not(self.mask.current)])
+        else:
+            x = np.unique(X)
+        min_x = np.min(x)
+        max_x = np.max(x)
+        return (min_x, max_x)
+
+    def ylim(self):
+        X, Y = self.get_cart_dimensions()
+        if self.mask.current is not None:
+            y = np.unique(Y[np.logical_not(self.mask.current)])
+        else:
+            y = np.unique(Y)
+        min_y = np.min(y)
+        max_y = np.max(y)
+        return (min_y, max_y)
+
     @classmethod
     def from_basis(image2D, basis, n, x, y):
         """
@@ -93,19 +113,19 @@ class Image2D(ImageBase):
 
     @classmethod
     def from_file(image2D, fpath):
-        file_data = np.load(fpath, allow_pickle=True)
-        required_fields = ['data', 'x', 'y', 'z']
-        for field in required_fields:
-            if field not in file_data:
-                raise KeyError("required field : {}".format(field) +
-                               " is missing from npz file")
+        with np.load(fpath, allow_pickle=True) as file_data:
+            required_fields = ['data', 'x', 'y', 'z']
+            for field in required_fields:
+                if field not in file_data:
+                    raise KeyError("required field : {}".format(field) +
+                                   " is missing from npz file")
 
-        img_stack = image2D(file_data['data'], file_data['x'],
-                                  file_data['y'], file_data['z'])
-        if 'mask_shape' in file_data:
-            img_stack.set_mask(file_data['mask_shape'],
-                               file_data['mask_region'],
-                               file_data['mask_constraint'])
+            img_stack = image2D(file_data['data'], file_data['x'],
+                                      file_data['y'], file_data['z'])
+            if 'mask_shape' in file_data:
+                img_stack.set_mask(file_data['mask_shape'],
+                                   file_data['mask_region'],
+                                   file_data['mask_constraint'])
         return img_stack
 
 
@@ -146,8 +166,8 @@ class Image2D(ImageBase):
                 new_data = self.masked_data.mean(axis=0)
             else:
                 new_data = self.data.mean(axis=0)
-            new_x = np.array([0.])
-            new_y = self.y
+            new_x = self.y
+            new_y = np.array([0.])
         elif dimension == 'y':
             if use_masked:
                 new_data = self.masked_data.mean(axis=1)
@@ -186,6 +206,23 @@ class Image2D(ImageBase):
         flux = int_val
         return flux
 
+    def abs_dif(self, other):
+        """
+        absolute difference of pixel value between two images
+
+        Parameters
+        ----------
+        other: Image2D
+            the other image to compare the pixel values with
+        """
+        self._check_image_compatible(other)
+        new_data = np.zeros(self.data.shape)
+        self_masked_data = self.masked_data.compressed()
+        other_masked_data = other.masked_data.compressed()
+        new_data[np.logical_not(self.mask.current)] = np.abs(self_masked_data-other_masked_data)
+        image = Image2D(new_data, self.x, self.y, self.z)
+        image.apply_mask(self.mask)
+        return image
 
     def _basis_projection(self, basis_decomp, fit_output):
         """
@@ -360,9 +397,30 @@ class ImageStack2D(ImageStackBase):
         return image_stack2D(data, x, y, modes.astype(np.double))
 
     def slice_z(self, z_index=None, z_value=None):
-        sliced_data, sliced_z = self._slice_z(z_index=z_index, z_value=z_value)
-        sliced_image = Image2D(sliced_data, self.x, self.y, sliced_z)
+        """
+        slice the current image stack in z direction
+
+        Parameters
+        ----------
+        z_index: int or sequence of ints
+            the indexes to slice at
+        z_value: float or sequence of floats
+            the z positions to slice at
+
+        Returns
+        -------
+        ImageStack2D
+            if z_index or z_value are sequence
+        Image2D
+            if z_index or z_value are scalar
+        """
+        sliced_data, sliced_z, is_sequence = self._slice_z(z_index=z_index, z_value=z_value)
+        if is_sequence:
+            sliced_image = ImageStack2D(sliced_data, self.x, self.y, sliced_z)
+        else:
+            sliced_image = Image2D(sliced_data, self.x, self.y, sliced_z)
         sliced_image.apply_mask(mask=self.mask)
+        sliced_image.label = self.label
         return sliced_image
 
     def get_cart_dimensions(self):
@@ -385,19 +443,19 @@ class ImageStack2D(ImageStackBase):
 
     @classmethod
     def from_file(image_stack2D, fpath):
-        file_data = np.load(fpath, allow_pickle=True)
-        required_fields = ['data', 'x', 'y', 'z']
-        for field in required_fields:
-            if field not in file_data:
-                raise KeyError("required field : {}".format(field) +
-                               " is missing from npz file")
-
-        img_stack = image_stack2D(file_data['data'], file_data['x'],
-                                  file_data['y'], file_data['z'])
-        if 'mask_shape' in file_data:
-            img_stack.set_mask(file_data['mask_shape'],
-                               file_data['mask_region'],
-                               file_data['mask_constraint'])
+        with np.load(fpath, allow_pickle=True) as file_data:
+            #file_data = np.load(fpath, allow_pickle=True)
+            required_fields = ['data', 'x', 'y', 'z']
+            for field in required_fields:
+                if field not in file_data:
+                    raise KeyError("required field : {}".format(field) +
+                                   " is missing from npz file")
+            img_stack = image_stack2D(file_data['data'], file_data['x'],
+                                      file_data['y'], file_data['z'])
+            if 'mask_shape' in file_data:
+                img_stack.set_mask(file_data['mask_shape'],
+                                   file_data['mask_region'],
+                                   file_data['mask_constraint'])
         return img_stack
 
 

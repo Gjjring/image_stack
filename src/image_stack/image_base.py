@@ -5,6 +5,7 @@ import scipy.optimize
 import image_stack.statistics
 from image_stack.mask import mask_from_data, copy_mask
 #from image_stack.basis_decomposition import BasisDecomposition
+from image_stack.utils import is_iterable
 from image_stack.basis_functions import BasisFunctions
 from image_stack.focal import FocalPlane
 from image_stack.statistics import (InformationCriteria, information_criterion,
@@ -165,6 +166,22 @@ class ImageBase(ABC):
                       -ref_lower.masked_data.compressed()))
         self.data[np.logical_not(mask)] = new_data
 
+    def normalise_reference_image_stacks(self, ref_upper, ref_lower):
+        """
+        normalise the data between an upper and lower reference image
+
+        Parameters
+        ----------
+        ref_upper: ImageBase object
+            the upper reference
+        ref_lower: ImageBase object
+            the lower reference
+        """
+        ref_image_upper = ref_upper.slice_z(z_value=self.z)
+        ref_image_lower = ref_lower.slice_z(z_value=self.z)
+        self._check_image_compatible(ref_image_upper)
+        self._check_image_compatible(ref_image_lower)
+        self.normalise_reference_images(ref_image_upper, ref_image_lower)
 
     def normalise_reference_values(self, upper, lower):
         """
@@ -178,7 +195,7 @@ class ImageBase(ABC):
             the lower value
         """
         new_data = (self.masked_data - lower)/(upper-lower)
-        self.data[np.logical_not(self.mask.current())] = new_data
+        self.data[np.logical_not(self.mask.current)] = new_data.flatten()
 
     def std(self):
         """
@@ -272,7 +289,7 @@ class ImageBase(ABC):
         criterion: InformationCriteria Enum
             the information criteria to be minimized
         """
-        n_modes = n_modes
+        n_modes = int(n_modes)
         fit_output = self.fit_basis(basis, int(n_modes))
         residual = fit_output['squared_residuals']
         n_data_points = ma.count(self.masked_data)
@@ -300,7 +317,7 @@ class ImageBase(ABC):
         criterion: InformationCriteria Enum
             the information criteria to be minimized
         """
-        obj_fun = lambda x : self._evalulate_info_criterion(basis, x,
+        obj_fun = lambda x : self._evalulate_info_criterion(basis, x*2+1,
                                                             criterion)
         res = scipy.optimize.minimize_scalar(obj_fun,
                                        bounds=(min_n_modes, max_n_modes),
@@ -313,7 +330,7 @@ class ImageBase(ABC):
         #                            options={'maxiter':100,
         #                                     'xatol':0.5,
         #                                     'disp':True})
-        max_n_modes_required = int(res['x'])
+        max_n_modes_required = int(res['x']*2+1)
         return max_n_modes_required
 
 
@@ -410,18 +427,23 @@ class ImageStackBase(ABC):
             flux = image.flux(xy_scale=xy_scale)
             self.data[..., layer] /= flux
 
-    def normalise_range(self):
+    def normalise_range(self, layer_by_layer=True):
         """
         normalise the data such that the data lie between 0. and 1.
         """
-        for layer in range(self.n_layers):
-            image = self.slice_z(z_index=layer)
-            max_val = np.max(image.masked_data)
-            min_val = np.min(image.masked_data)
-            if np.isclose(np.abs(max_val-min_val), 0.):
-                raise ValueError("cannot normalise range with equal maximum and" +
-                                 " minimum value")
-            self.data[..., layer] = (self.data[..., layer]-min_val)/(max_val-min_val)
+        if layer_by_layer:
+            for layer in range(self.n_layers):
+                image = self.slice_z(z_index=layer)
+                max_val = np.max(image.masked_data)
+                min_val = np.min(image.masked_data)
+                if np.isclose(np.abs(max_val-min_val), 0.):
+                    raise ValueError("cannot normalise range with equal maximum and" +
+                                     " minimum value")
+                self.data[..., layer] = (self.data[..., layer]-min_val)/(max_val-min_val)
+        else:
+            max_val = np.max(self.masked_data)
+            min_val = np.min(self.masked_data)
+            self.data = (self.data-min_val)/(max_val-min_val)
 
     def normalise_highest(self):
         """
@@ -446,7 +468,7 @@ class ImageStackBase(ABC):
         other: subclass of ImageBase
             a different image object instance to compare to
         """
-        self._check_image_compatible(other)
+        self._check_stack_compatible(other)
         return residuals(self.masked_data.compressed(), other.masked_data.compressed())
 
     def normalise_reference_values(self, upper, lower):
@@ -460,8 +482,10 @@ class ImageStackBase(ABC):
         lower: float
             the lower value
         """
-        new_data = (self.masked_data - lower)/(upper-lower)
-        self.data[np.logical_not(self.mask.current())] = new_data
+        for layer in range(self.n_layers):
+            image = self.slice_z(z_index=layer)
+            image.normalise_reference_values(ref_upper, ref_lower)
+            self.data[..., layer] = image.data
 
     def normalise_reference_images(self, ref_upper, ref_lower):
         """
@@ -479,6 +503,27 @@ class ImageStackBase(ABC):
             image.normalise_reference_images(ref_upper, ref_lower)
             self.data[..., layer] = image.data
 
+    def normalise_reference_image_stacks(self, ref_upper, ref_lower):
+        """
+        normalise the data between an upper and lower reference image
+
+        Parameters
+        ----------
+        ref_upper: ImageStackBase object
+            the upper reference
+        ref_lower: ImageStackBase object
+            the lower reference
+        """
+        self._check_stack_compatible(ref_upper)
+        self._check_stack_compatible(ref_upper)
+        for layer in range(self.n_layers):
+            image = self.slice_z(z_index=layer)
+            ref_image_upper = ref_upper.slice_z(z_index=layer)
+            ref_image_lower = ref_lower.slice_z(z_index=layer)
+            image.normalise_reference_images(ref_image_upper, ref_image_lower)
+            self.data[..., layer] = image.data
+
+
     def _check_stack_compatible(self, other):
         if not isinstance(self, type(other)):
             raise ValueError("cannot compare image stack of type {}".format(type(self)) +
@@ -492,38 +537,34 @@ class ImageStackBase(ABC):
         if not np.all(np.isclose(self.z,other.z)):
             raise ValueError("cannot compare image_stacks with different z positions")
 
-    def normalise_reference_image_stacks(self, ref_upper, ref_lower):
-        """
-        normalise the data between an upper and lower reference image
-
-        Parameters
-        ----------
-        ref_upper: ImageBase object
-            the upper reference
-        ref_lower: ImageBase object
-            the lower reference
-        """
-        self._check_stack_compatible(ref_upper)
-        self._check_stack_compatible(ref_upper)
-        for layer in range(self.n_layers):
-            image = self.slice_z(z_index=layer)
-            ref_image_upper = ref_upper.slice_z(z_index=layer)
-            ref_image_lower = ref_lower.slice_z(z_index=layer)
-            image.normalise_reference_images(ref_image_upper, ref_image_lower)
-            self.data[..., layer] = image.data
-
     def _slice_z(self, z_index=None, z_value=None):
         if z_index is None and z_value is None:
             raise ValueError("for z slice, either z_index or z_value must not be None")
         if z_index is not None and z_value is not None:
             raise ValueError("for z slice, only one of z_index or z_value may not be None")
         if z_value is not None:
-            z_index = np.where(np.isclose(self.z,z_value))[0]
+            if not is_iterable(z_value):
+                z_index = np.where(np.isclose(self.z, z_value))[0]
+            else:
+                z_index = []
+                for value in z_value:
+                    slice_index = np.where(np.isclose(self.z, value))[0]
+                    if len(slice_index) == 0:
+                        raise ValueError("cannot slice for z position {}".format(value) +
+                                         ", it is not in the image stack")
+                    z_index.append(slice_index[0])
+
             if len(z_index) == 0:
                 raise ValueError("cannot slice for z position {}, it is not in the image stack".format(z_value))
+        else:
+            z_index = [z_index]
+        if len(z_index)>1:
+            is_sequence = True
+        else:
+            is_sequence = False
         sliced_data = np.squeeze(self.data[..., z_index])
         sliced_z = self.z[z_index]
-        return sliced_data, sliced_z
+        return sliced_data, sliced_z, is_sequence
 
     def std(self):
         """
@@ -580,14 +621,14 @@ class ImageStackBase(ABC):
         criterion: InformationCriteria Enum
             the information criteria to be minimized
         """
-        all_max_n_modes = np.zeros(self.n_layers, dtype=np.int64)
+        all_required_modes = np.zeros(self.n_layers, dtype=np.int64)
         for layer in range(self.n_layers):
             image = self.slice_z(layer)
-            max_n_modes = image.optimise_basis_size(basis, max_n_modes,
+            required_n_modes = image.optimise_basis_size(basis, max_n_modes,
                                                     min_n_modes=min_n_modes,
                                                     criterion=criterion)
-            all_max_n_modes[layer] = max_n_modes
-        return all_max_n_modes
+            all_required_modes[layer] = required_n_modes
+        return all_required_modes
 
     def determine_focal_plane(self, model='gaussian', measure='std_dev'):
         z = self.z

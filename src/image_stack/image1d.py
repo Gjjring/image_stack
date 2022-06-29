@@ -50,6 +50,15 @@ class Image1D(ImageBase):
         """
         raise ValueError("Image1D does not have cylindrical dimensions")
 
+    def xlim(self):
+        if self.mask.current is not None:
+            x = self.x[np.logical_not(self.mask.current)]
+        else:
+            x = self.x
+        min_x = np.min(x)
+        max_x = np.max(x)
+        return (min_x, max_x)
+
     @classmethod
     def from_basis(image1D, basis, n, x):
         """
@@ -73,18 +82,18 @@ class Image1D(ImageBase):
 
     @classmethod
     def from_file(image1D, fpath):
-        file_data = np.load(fpath, allow_pickle=True)
-        required_fields = ['data', 'x', 'z']
-        for field in required_fields:
-            if field not in file_data:
-                raise KeyError("required field : {}".format(field) +
-                               " is missing from npz file")
-        img_stack = image1D(file_data['data'], file_data['x'],
-                                  file_data['z'])
-        if 'mask_shape' in file_data:
-            img_stack.set_mask(file_data['mask_shape'],
-                               file_data['mask_region'],
-                               file_data['mask_constraint'])
+        with np.load(fpath, allow_pickle=True) as file_data:
+            required_fields = ['data', 'x', 'z']
+            for field in required_fields:
+                if field not in file_data:
+                    raise KeyError("required field : {}".format(field) +
+                                   " is missing from npz file")
+            img_stack = image1D(file_data['data'], file_data['x'],
+                                      file_data['z'])
+            if 'mask_shape' in file_data:
+                img_stack.set_mask(file_data['mask_shape'],
+                                   file_data['mask_region'],
+                                   file_data['mask_constraint'])
         return img_stack
 
 
@@ -119,6 +128,24 @@ class Image1D(ImageBase):
         flux = np.trapz(self.masked_data, self.x*xy_scale)
         return flux
 
+    def abs_dif(self, other):
+        """
+        absolute difference of pixel value between two images
+
+        Parameters
+        ----------
+        other: Image1D
+            the other image to compare the pixel values with
+        """
+        self._check_image_compatible(other)
+        new_data = np.zeros(self.data.shape)
+        self_masked_data = self.masked_data.compressed()
+        other_masked_data = other.masked_data.compressed()
+        new_data[np.logical_not(self.mask.current)] = np.abs(self_masked_data-other_masked_data)
+        image = Image1D(new_data, self.x, self.z)
+        image.apply_mask(self.mask)
+        return image
+
     def _basis_projection(self, basis_decomp, fit_output):
         """
         find the basis coefficients for a projection of the masked data
@@ -152,9 +179,10 @@ class Image1D(ImageBase):
         res = basis_decomp._fit_coefficients(self.masked_data,
                                             fit_output['projected_coefficients'])
         fit_output['fitted_coefficients'][...] = res[0]
+        std_floor = 1e-8
         if res[1] is not None:
             diag_vals = np.squeeze(np.array([np.diag(res[1])]))
-            diag_vals[diag_vals<0.] = 0.
+            diag_vals[diag_vals<std_floor] = std_floor
             fit_output['std_devs'][...] = np.sqrt(diag_vals)
         fitted_data[...] = basis_decomp.image_from_coefficients(res[0])
         fit_output['squared_residuals'] = (res[2]['fvec']**2).sum()
@@ -227,11 +255,13 @@ class ImageStack1D(ImageStackBase):
         self.n_layers = z.size
 
     def slice_z(self, z_index=None, z_value=None):
-        sliced_data, sliced_z = self._slice_z(z_index=z_index, z_value=z_value)
-        sliced_image = Image1D(sliced_data, self.x, sliced_z)
-        #print(self.mask.current)
+        sliced_data, sliced_z, is_sequence = self._slice_z(z_index=z_index, z_value=z_value)
+        if is_sequence:
+            sliced_image = ImageStack1D(sliced_data, self.x, sliced_z)
+        else:
+            sliced_image = Image1D(sliced_data, self.x, sliced_z)
         sliced_image.apply_mask(mask=self.mask)
-        #print(sliced_image.mask.current)
+        sliced_image.label = self.label
         return sliced_image
 
     def get_cart_dimensions(self):
@@ -298,18 +328,18 @@ class ImageStack1D(ImageStackBase):
 
     @classmethod
     def from_file(image_stack1D, fpath):
-        file_data = np.load(fpath, allow_pickle=True)
-        required_fields = ['data', 'x', 'z']
-        for field in required_fields:
-            if field not in file_data:
-                raise KeyError("required field : {}".format(field) +
-                               " is missing from npz file")
-        img_stack = image_stack1D(file_data['data'], file_data['x'],
-                                  file_data['z'])
-        if 'mask_shape' in file_data:
-            img_stack.set_mask(file_data['mask_shape'],
-                               file_data['mask_region'],
-                               file_data['mask_constraint'])
+        with np.load(fpath, allow_pickle=True) as file_data:
+            required_fields = ['data', 'x', 'z']
+            for field in required_fields:
+                if field not in file_data:
+                    raise KeyError("required field : {}".format(field) +
+                                   " is missing from npz file")
+            img_stack = image_stack1D(file_data['data'], file_data['x'],
+                                      file_data['z'])
+            if 'mask_shape' in file_data:
+                img_stack.set_mask(file_data['mask_shape'],
+                                   file_data['mask_region'],
+                                   file_data['mask_constraint'])
         return img_stack
 
 
@@ -365,7 +395,8 @@ class BasisDecomposition1D(ImageStack1D):
         if not isinstance(modes, np.ndarray):
             raise AttributeError("modes must by numpy.ndarray")
         super().__init__(data, x, modes.astype(float))
-        self.mask = mask
+        self.apply_mask(mask)
+
 
     @staticmethod
     def normalise_dimensions(x, mask):
