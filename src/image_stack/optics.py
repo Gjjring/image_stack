@@ -89,4 +89,4 @@ def snell(n1, theta1, n2):
     n2: complex
         refractive index on non incident side
     """
-    return np.degrees(np.arcsin(np.clip((n1/n2)*np.sin(np.radians(theta1)), -1., 1.)))
+    return np.degrees(np.real(np.arcsin(np.clip((n1/n2)*np.sin(np.radians(theta1)), -1., 1.))))
