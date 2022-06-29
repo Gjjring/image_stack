@@ -2,6 +2,7 @@ import numpy as np
 from numpy import ma
 from image_stack.image_base import ImageBase, ImageStackBase
 from image_stack.integrator import Integrator2D
+from image_stack.focal import CenteredGaussianModel
 from  image_stack import basis_functions
 from image_stack.image1d import Image1D, ImageStack1D
 from image_stack.mask import Mask2D
@@ -285,6 +286,29 @@ class Image2D(ImageBase):
         projected_coefficients = self._basis_projection(bd, fit_output)
         self._optimize_projection(bd, fit_output)
         return fit_output
+
+    def remove_gaussian(self):
+        """
+        fit and remove a gaussian spot to the data.
+
+        Parameters
+        ----------
+
+        """
+        R, PHI = self.get_cyl_dimensions()
+        plot = False
+        gauss_model = CenteredGaussianModel(plot)
+        sort_index = np.argsort(R.flatten())
+        r_values = R.flatten()[sort_index]
+        data = self.masked_data.flatten()[sort_index]
+
+        gauss_model.fit_parameters(R.flatten(), self.masked_data.flatten())
+        model_values = gauss_model.evaluate(R.flatten()).reshape(R.shape)
+        #self.data -= model_values
+        print(gauss_model.parameters)
+        model_image = Image2D(model_values, self.x, self.y, self.z)
+        model_image.apply_mask(self.mask)
+        return model_image
 
     def _check_image_compatible(self, other):
         if not isinstance(self, type(other)):

@@ -21,7 +21,6 @@ def _mask_z_and_data(window, center, z, data):
 
 class FocalPlane():
 
-
     def __init__(self, z, data, model='gaussian', plot=False):
         self.z = z
         self.data = data
@@ -141,7 +140,7 @@ class GaussianModel(ModelBase):
     def _init_params(self, z, data):
         a = np.max(data)-np.min(data)
         b = z[np.where(np.isclose(data, np.max(data)))[0][0]]
-        z_range = (z[-1]-z[0])
+        z_range = np.max(z)-np.min(z)
         c = z_range*0.5
         d = np.min(data)
         self.parameters = [a, b, c, d]
@@ -165,14 +164,17 @@ class GaussianModel(ModelBase):
         return utils.gaussian([a, b, c], z) + d
 
     def get_bounds(self, z, data):
-        z_range = z[-1]-z[0]
+        z_range = np.max(z)-np.min(z)
         bounds = []
-        bounds.append((-np.inf, np.min(z), -np.inf, -np.max(data)))
+        bounds.append((0., np.min(z), 0., -np.max(data)))
         bounds.append((np.inf, np.max(z), z_range*2, np.max(data)))
         return bounds
 
-    def fit_parameters(self, z, data):
-        self._init_params(z, data)
+    def fit_parameters(self, z, data, init_params=None):
+        if init_params is None:
+            self._init_params(z, data)
+        else:
+            self.parameters = init_params
         start_vals = list(self.parameters.values())
         minimize_func = lambda x : self.residuals(x, z, data)
         bounds = self.get_bounds(z, data)
@@ -188,6 +190,44 @@ class GaussianModel(ModelBase):
         squared_residuals = np.sum(np.abs(np.power(self.residuals(res['x'], z, data), 2)))
         focal_plane_estimate = res['x'][1]
         return focal_plane_estimate, squared_residuals, z.size
+
+class CenteredGaussianModel(GaussianModel):
+
+    def __init__(self, plot):
+        super().__init__(plot)
+        self.__parameters = {}
+        self.n_parameters = 3
+
+    def _init_params(self, z, data):
+        a = np.max(data)-np.min(data)
+        z_range = np.max(z)-np.min(z)
+        c = z_range*0.05
+        d = np.min(data)
+        self.parameters = [a, c, d]
+
+    @property
+    def parameters(self):
+        return self.__parameters
+
+    @parameters.setter
+    def parameters(self, params):
+        self.__parameters['a'] = params[0]
+        self.__parameters['c'] = params[1]
+        self.__parameters['d'] = params[2]
+
+    def evaluate(self, z):
+        a = self.parameters['a']
+        c = self.parameters['c']
+        d = self.parameters['d']
+        return utils.gaussian([a, 0., c], z) + d
+
+    def get_bounds(self, z, data):
+        z_range = np.max(z)-np.min(z)
+        bounds = []
+        bounds.append((0., 0., -np.max(data)))
+        bounds.append((np.inf, z_range*2, np.max(data)))
+        return bounds
+
 
 class Polynomial(ModelBase):
 
