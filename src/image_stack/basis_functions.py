@@ -185,7 +185,6 @@ def get_n_m_from_j_fringe_constrained(goal_j, max_m=4):
 
 def zernike_fringe(j, r, phi):
     n, m = get_n_m_from_j_fringe(j)
-    print("j: {}, n: {}, m: {}".format(j, n, m))
     return zernike(n, m, r, phi)
 
 def zernike_osa(j, r, phi):
