@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.ma as ma
-from scipy.special import eval_legendre
+from scipy.special import eval_legendre, eval_chebyt
 from enum import Enum
 
 class BasisFunctions(Enum):
@@ -10,6 +10,7 @@ class BasisFunctions(Enum):
     ZERNIKE_FRINGE = 2
     ZERNIKE_OSA = 3
     ZERNIKE_FRINGE_CONSTRAINED = 4
+    CHEBYSHEV = 5
 
 def function(basis_function):
     if basis_function == BasisFunctions.LEGENDRE1D:
@@ -22,6 +23,8 @@ def function(basis_function):
         return zernike_osa
     elif basis_function == BasisFunctions.ZERNIKE_FRINGE_CONSTRAINED:
         return zernike_fringe_constrained
+    elif basis_function == BasisFunctions.CHEBYSHEV:
+        return chebyshev
     else:
         raise ValueError("unknown basis function")
 
@@ -36,6 +39,8 @@ def is_polar(basis_function):
         return True
     elif basis_function == BasisFunctions.ZERNIKE_FRINGE_CONSTRAINED:
         return True
+    elif basis_function == BasisFunctions.CHEBYSHEV:
+        return False
     else:
         raise ValueError("unknown basis function")
 
@@ -50,8 +55,24 @@ def mode_start(basis_function):
         return 1
     elif basis_function == BasisFunctions.ZERNIKE_FRINGE_CONSTRAINED:
         return 1
+    elif basis_function == BasisFunctions.CHEBYSHEV:
+        return 0
     else:
         raise ValueError("unknown basis function")
+
+def chebyshev(n, x):
+    """
+    Evaluates chebyshev polynomial of order n in 1 dimension
+
+    Parameters
+    ----------
+    n: int
+        order of polynomial
+    x: np.ndarray<float>(N,)
+        1d array of x positions
+    """
+    values = eval_chebyt(n, x)
+    return values
 
 def legendre1D(n, x):
     """
