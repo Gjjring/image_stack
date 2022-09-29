@@ -146,6 +146,24 @@ class Image1D(ImageBase):
         image.apply_mask(self.mask)
         return image
 
+    def dif(self, other):
+        """
+        signed difference of pixel value between two images
+
+        Parameters
+        ----------
+        other: Image1D
+            the other image to compare the pixel values with
+        """
+        self._check_image_compatible(other)
+        new_data = np.zeros(self.data.shape)
+        self_masked_data = self.masked_data.compressed()
+        other_masked_data = other.masked_data.compressed()
+        new_data[np.logical_not(self.mask.current)] = self_masked_data-other_masked_data
+        image = Image1D(new_data, self.x, self.z)
+        image.apply_mask(self.mask)
+        return image
+
     def _basis_projection(self, basis_decomp, fit_output):
         """
         find the basis coefficients for a projection of the masked data
@@ -182,7 +200,7 @@ class Image1D(ImageBase):
         std_floor = 1e-8
         if res[1] is not None:
             diag_vals = np.squeeze(np.array([np.diag(res[1])]))
-            diag_vals[diag_vals<std_floor] = std_floor
+            diag_vals[diag_vals<std_floor] = np.abs(res[0][diag_vals<std_floor])*1e-2
             fit_output['std_devs'][...] = np.sqrt(diag_vals)
         fitted_data[...] = basis_decomp.image_from_coefficients(res[0])
         fit_output['squared_residuals'] = (res[2]['fvec']**2).sum()
