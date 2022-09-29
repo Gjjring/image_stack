@@ -129,6 +129,15 @@ class ModelBase(ABC):
                 break
         plt.plot(z, data, label=label_str)
 
+    def _plot_focal_function_2D(self, x, y, data):
+        label_str = ""
+        for key, val in self.parameters.items():
+            label_str += "{}:{:.2e} ".format(key, val)
+            if len(label_str) > 47:
+                label_str += "..."
+                break
+        plt.pcolormesh(x, y, data, label=label_str)
+
 
 class GaussianModel(ModelBase):
 
@@ -190,6 +199,80 @@ class GaussianModel(ModelBase):
         squared_residuals = np.sum(np.abs(np.power(self.residuals(res['x'], z, data), 2)))
         focal_plane_estimate = res['x'][1]
         return focal_plane_estimate, squared_residuals, z.size
+
+class GaussianModel2D(ModelBase):
+
+    def __init__(self, plot):
+        super().__init__(plot)
+        self.__parameters = {}
+        self.n_parameters = 5
+
+    def _init_params(self, x, y, data):
+        a = np.amax(data)-np.amin(data)
+        b = x[np.where(np.isclose(data, np.amax(data)))][0]
+        c = y[np.where(np.isclose(data, np.amax(data)))][0]
+        x_range = np.amax(x)-np.amin(x)
+        d = x_range*0.5
+        e = np.amin(data)
+        self.parameters = [a, b, c, d, e]
+
+    @property
+    def parameters(self):
+        return self.__parameters
+
+    @parameters.setter
+    def parameters(self, params):
+        self.__parameters['a'] = params[0]
+        self.__parameters['b'] = params[1]
+        self.__parameters['c'] = params[2]
+        self.__parameters['d'] = params[3]
+        self.__parameters['e'] = params[4]
+
+    def evaluate(self, x, y):
+        a = self.parameters['a']
+        b = self.parameters['b']
+        c = self.parameters['c']
+        d = self.parameters['d']
+        e = self.parameters['e']
+        return utils.gaussian2D([a, b, c, d], x, y) + e
+
+    def get_bounds(self, x, y, data):
+        x_range = np.amax(x)-np.amin(x)
+        y_range = np.amax(y)-np.amin(y)
+        bounds = []
+        bounds.append((0., np.amin(x), np.amin(y), 0., -np.amax(data)))
+        bounds.append((np.inf, np.amax(x), np.amax(y), x_range*2, np.amax(data)))
+        return bounds
+
+    def residuals(self, model_params, x, y, data):
+        self.parameters = model_params
+        residuals = (self.evaluate(x, y)-data).flatten()
+        return residuals
+
+
+    def fit_parameters(self, x, y, data, init_params=None):
+        if init_params is None:
+            self._init_params(x, y, data)
+        else:
+            self.parameters = init_params
+        start_vals = list(self.parameters.values())
+        minimize_func = lambda t : self.residuals(t, x, y, data)
+        bounds = self.get_bounds(x, y, data)
+        res = scipy.optimize.least_squares(minimize_func,
+                                            method='trf',
+                                            loss='linear',
+                                            x0=start_vals,
+                                            bounds=bounds)
+
+        self.parameters = res['x']
+        if self.plot:
+            self._plot_focal_function_2D(x, y, self.evaluate(x, y))
+        squared_residuals = np.sum(np.abs(np.power(self.residuals(res['x'],
+                                                                  x, y, data), 2)))
+        center_x = res['x'][1]
+        center_y = res['x'][2]
+        return center_x, center_y, squared_residuals, x.shape
+
 
 class CenteredGaussianModel(GaussianModel):
 
