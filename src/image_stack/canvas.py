@@ -23,12 +23,14 @@ def plot_image_difference(axes, image1, image2, length_scale=1.0):
     try:
         plot_image_difference_2D(axes, image1, image2, length_scale)
         return
-    except ValueError as exp:
+    except (ValueError, AssertionError) as exp:
+        print(exp)
         pass
     try:
         plot_image_difference_1D(axes, image1, image2, length_scale)
         return
     except ValueError as exp:
+        print(exp)
         pass
     raise ValueError("unknown image type")
 
@@ -86,12 +88,16 @@ def plot_image2D(ax, image, xy_scale=1.0, vmin=None, vmax=None):
 
 
 def plot_image_through_focus(ax, image, x_scale=1.0, z_scale=1.0,
-                             vmin=None, vmax=None):
+                             vmin=None, vmax=None, color_scale='linear'):
     x = image.x*x_scale
     z = image.z*z_scale
     plt.sca(ax)
     X, Z = np.meshgrid(x, z, indexing='ij')
-    plt.pcolormesh(X, Z, image.masked_data, shading='gouraud',
+    if color_scale == 'linear':
+        plot_data = image.masked_data
+    elif color_scale == 'log':
+        plot_data = np.log10(image.masked_data)
+    plt.pcolormesh(X, Z, plot_data, shading='gouraud',
                     vmin=vmin, vmax=vmax, cmap='Greys_r')
 
 def plot_image2D_stacked(ax, image_stack, xy_scale=1.0, z_scale=1.0,

@@ -182,6 +182,43 @@ class Image2D(ImageBase):
         #print("new_data.shape: {}".format(new_data.shape))
         return Image1D(new_data, new_x, self.z)
 
+    def slice_dimension(self, dimension='y', position=0., use_masked=False):
+        """
+        average data values over a lateral dimension and return Image1D
+
+        Parameters
+        ----------
+        dimension: string |'x'|'y'|
+            the dimension to average over
+        position: float
+            the position along the dimension at which to slice
+        use_masked: bool
+            average the masked data
+        """
+        if dimension == 'x':
+            slice_index = np.where(np.isclose(self.x, position))[0][0]
+            if use_masked:
+                new_data = self.masked_data[slice_index, :]
+            else:
+                new_data = self.masked_data[slice_index, :]
+            new_x = self.y
+            new_y = np.array([position])
+        elif dimension == 'y':
+            slice_index = np.where(np.isclose(self.y, position))[0][0]
+            if use_masked:
+                new_data = self.masked_data[:, slice_index]
+            else:
+                new_data = self.masked_data[:, slice_index]
+            new_x = self.x
+            new_y = np.array([position])
+        else:
+            raise ValueError("dimension must by either x or y", +
+                             " ,value was: {}".format(dimension))
+        #print("new_data.shape: {}".format(new_data.shape))
+        return Image1D(new_data, new_x, self.z)
+    
+
+    
     def flux(self, xy_scale=1.0):
         """
         integrate the masked data over the x & y dimensions
@@ -339,7 +376,7 @@ class Image2D(ImageBase):
 
         """
         gaussian_model = self.fit_gaussian()
-        self.data = self.data-model.data
+        self.data = self.data-gaussian_model.data
 
     def _check_image_compatible(self, other):
         if not isinstance(self, type(other)):
@@ -493,7 +530,20 @@ class ImageStack2D(ImageStackBase):
         PHI = np.arctan2(Y, X)
         return R, PHI
 
+    def remove_gaussian(self):
+        """
+        fit and remove a gaussian from the data.
 
+        Parameters
+        ----------
+
+        """
+        images = []
+        for layer in range(self.n_layers):
+            sliced_image = self.slice_z(z_index=layer)            
+            sliced_image.remove_gaussian()
+            images.append(sliced_image)
+        return ImageStack2D.from_image_list(images)
 
 
     @classmethod
@@ -567,6 +617,28 @@ class ImageStack2D(ImageStackBase):
                                                         use_masked=use_masked)
             images.append(im_1d)
         return ImageStack1D.from_image_list(images)
+
+    def slice_dimension(self, dimension='y', position=0., use_masked=False):
+        """
+        average data values over a lateral dimension and return Image1D
+
+        Parameters
+        ----------
+        dimension: string |'x'|'y'|
+            the dimension to average over
+        position: float
+            the position at which to slice the dimension
+        use_masked: bool
+            average the masked data
+        """
+        images = []
+        for layer in range(self.n_layers):
+            sliced_image = self.slice_z(z_index=layer)
+            im_1d = sliced_image.slice_dimension(dimension=dimension,
+                                                        position=position,
+                                                        use_masked=use_masked)
+            images.append(im_1d)
+        return ImageStack1D.from_image_list(images)    
 
 class BasisDecomposition2D(ImageStack2D):
     """

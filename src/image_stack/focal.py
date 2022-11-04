@@ -75,7 +75,7 @@ class FocalPlane():
         float
             The size of the fitting window in z coordinates
         """
-        z_range = (self.z[-1]-self.z[0])
+        z_range = (np.max(self.z)-np.min(self.z))
         fit_window = z_range
         focal_pos0 = self.fit()[0]
         self.current_focus_estimate = focal_pos0

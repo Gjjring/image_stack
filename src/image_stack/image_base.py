@@ -195,7 +195,7 @@ class ImageBase(ABC):
             the lower value
         """
         new_data = (self.masked_data - lower)/(upper-lower)
-        self.data[np.logical_not(self.mask.current)] = new_data.flatten()
+        self.data[np.logical_not(self.mask.current)] = new_data.compressed()
 
     def std(self):
         """
@@ -484,7 +484,7 @@ class ImageStackBase(ABC):
         """
         for layer in range(self.n_layers):
             image = self.slice_z(z_index=layer)
-            image.normalise_reference_values(ref_upper, ref_lower)
+            image.normalise_reference_values(upper, lower)
             self.data[..., layer] = image.data
 
     def normalise_reference_images(self, ref_upper, ref_lower):
