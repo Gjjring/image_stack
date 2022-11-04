@@ -227,7 +227,7 @@ class Image2D(ImageBase):
 
     def dif(self, other):
         """
-        absolute difference of pixel value between two images
+        signed difference of pixel value between two images
 
         Parameters
         ----------
@@ -307,9 +307,9 @@ class Image2D(ImageBase):
         self._optimize_projection(bd, fit_output)
         return fit_output
 
-    def remove_gaussian(self):
+    def fit_gaussian(self):
         """
-        fit and remove a gaussian spot to the data.
+        fit and return a gaussian model to the data.
 
         Parameters
         ----------
@@ -325,10 +325,21 @@ class Image2D(ImageBase):
         gauss_model.fit_parameters(R.flatten(), self.masked_data.flatten())
         model_values = gauss_model.evaluate(R.flatten()).reshape(R.shape)
         #self.data -= model_values
-        print(gauss_model.parameters)
+        #print(gauss_model.parameters)
         model_image = Image2D(model_values, self.x, self.y, self.z)
         model_image.apply_mask(self.mask)
         return model_image
+
+    def remove_gaussian(self):
+        """
+        fit and remove a gaussian from the data.
+
+        Parameters
+        ----------
+
+        """
+        gaussian_model = self.fit_gaussian()
+        self.data = self.data-model.data
 
     def _check_image_compatible(self, other):
         if not isinstance(self, type(other)):
