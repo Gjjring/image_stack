@@ -317,8 +317,10 @@ class ImageBase(ABC):
         criterion: InformationCriteria Enum
             the information criteria to be minimized
         """
-        obj_fun = lambda x : self._evalulate_info_criterion(basis, x*2+1,
+        obj_fun = lambda x : self._evalulate_info_criterion(basis, x,
                                                             criterion)
+        #print("bounds: {}".format((min_n_modes, max_n_modes)))
+        #return
         res = scipy.optimize.minimize_scalar(obj_fun,
                                        bounds=(min_n_modes, max_n_modes),
                                        method='bounded',
@@ -330,7 +332,7 @@ class ImageBase(ABC):
         #                            options={'maxiter':100,
         #                                     'xatol':0.5,
         #                                     'disp':True})
-        max_n_modes_required = int(res['x']*2+1)
+        max_n_modes_required = int(res['x'])
         return max_n_modes_required
 
 
