@@ -8,6 +8,7 @@ from image_stack.image1d import Image1D, ImageStack1D
 from image_stack.mask import Mask2D
 import scipy.optimize
 from image_stack.statistics import residuals
+from copy import copy
 
 class Image2D(ImageBase):
 
@@ -45,6 +46,12 @@ class Image2D(ImageBase):
         self.x = x
         self.y = y
         self.z = z
+
+    @classmethod
+    def from_image(image2d, other_image):
+        return image2d(copy(other_image.data), copy(other_image.x),
+                       copy(other_image.y), copy(other_image.z))
+
 
     def get_cart_dimensions(self):
         """
