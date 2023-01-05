@@ -3,10 +3,10 @@ import numpy as np
 import os, sys
 import logging
 sys.path.append(os.path.join("..","src"))
-from image_stack.image2d import Image2D, ImageStack2D, BasisDecomposition2D
-from image_stack.basis_functions import BasisFunctions
-from image_stack.statistics import InformationCriteria
-from image_stack.mask import Mask2D
+from imagestack.image2d import Image2D, ImageStack2D, BasisDecomposition2D
+from imagestack.basis_functions import BasisFunctions
+from imagestack.statistics import InformationCriteria
+from imagestack.mask import Mask2D
 
 def test_init():
     x = np.linspace(-1., 1.,51)
