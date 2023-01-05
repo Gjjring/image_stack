@@ -3,9 +3,9 @@ import numpy as np
 import os, sys
 import logging
 sys.path.append(os.path.join("..","src"))
-from image_stack.image2d import Image2D
-from image_stack.basis_functions import BasisFunctions
-from image_stack.statistics import InformationCriteria
+from imagestack.image2d import Image2D
+from imagestack.basis_functions import BasisFunctions
+from imagestack.statistics import InformationCriteria
 
 def test_init():
     x = np.linspace(-1., 1., 51)

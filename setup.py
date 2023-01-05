@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="image_stack", # Replace with your own username
+    name="imagestack", # Replace with your own username
     version="0.0.1",
     author="Phillip Manley",
     author_email="manley@zib.de",

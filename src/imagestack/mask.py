@@ -74,7 +74,7 @@ class Mask2D():
             mask = self._get_null_mask(X, Y)
             self.polar = False
         else:
-            raise ValueError("unknown mask type :[{}]".format(self.shape))
+            raise ValueError("unknown mask type for 2D mask :[{}]".format(self.shape))
         self.current = mask
         return mask
 
@@ -163,7 +163,7 @@ class Mask1D():
         elif self.shape == None:
             mask = self._get_null_mask(x)
         else:
-            raise ValueError("unknown mask type :[{}]".format(self.shape))
+            raise ValueError("unknown mask type for 1D mask :[{}]".format(self.shape))
         self.current = mask
         return mask
 

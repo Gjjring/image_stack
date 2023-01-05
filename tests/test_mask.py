@@ -3,7 +3,7 @@ import numpy as np
 import os, sys
 import logging
 sys.path.append(os.path.join("..","src"))
-from image_stack.mask import Mask1D, Mask2D
+from imagestack.mask import Mask1D, Mask2D
 
 @pytest.fixture
 def create_mask1d():
