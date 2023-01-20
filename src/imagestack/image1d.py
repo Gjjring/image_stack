@@ -59,6 +59,15 @@ class Image1D(ImageBase):
         max_x = np.max(x)
         return (min_x, max_x)
 
+    def average_edge_data(self):
+        complement_mask = Mask1D.from_mask(self.mask, complement=True)
+        complement_mask.constraint = complement_mask.constraint*0.95
+        x = self.x
+        complement_mask_array = complement_mask.generate_mask(x)
+        complement_masked_data = ma.array(self.data, copy=False)
+        complement_masked_data.mask = np.logical_or(complement_mask_array, self.mask.current)
+        return complement_masked_data.mean()
+
     @classmethod
     def from_basis(image1D, basis, n, x):
         """
@@ -384,6 +393,21 @@ class ImageStack1D(ImageStackBase):
             coef = ma.sum(masked_1d_data*basis_func)/n_unmasked
             coefficients[layer] = coef
         return coefficients
+
+    def average_edge_data(self):
+        """
+        return average value of masked data close to mask edge.
+
+        Returns
+        -------
+        np.ndarray<N,>(float)
+          - the average value of the edge data in the N layers
+        """
+        edge_average = np.zeros(self.n_layers)
+        for layer in range(self.n_layers):
+            sliced_image = self.slice_z(z_index=layer)
+            edge_average[layer] = sliced_image.edge_average_data()
+        return edge_average
 
 
 class BasisDecomposition1D(ImageStack1D):

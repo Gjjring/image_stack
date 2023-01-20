@@ -3,7 +3,7 @@ from numpy import ma
 from imagestack.image_base import ImageBase, ImageStackBase
 from imagestack.integrator import Integrator2D
 from imagestack.focal import CenteredGaussianModel
-from  imagestack import basis_functions
+from imagestack import basis_functions
 from imagestack.image1d import Image1D, ImageStack1D
 from imagestack.mask import Mask2D
 import scipy.optimize
@@ -223,9 +223,9 @@ class Image2D(ImageBase):
                              " ,value was: {}".format(dimension))
         #print("new_data.shape: {}".format(new_data.shape))
         return Image1D(new_data, new_x, self.z)
-    
 
-    
+
+
     def flux(self, xy_scale=1.0):
         """
         integrate the masked data over the x & y dimensions
@@ -384,6 +384,15 @@ class Image2D(ImageBase):
         """
         gaussian_model = self.fit_gaussian()
         self.data = self.data-gaussian_model.data
+
+    def average_edge_data(self):
+        complement_mask = Mask2D.from_mask(self.mask, complement=True)
+        complement_mask.constraint = complement_mask.constraint*0.95
+        XY = self.get_cart_dimensions()
+        complement_mask_array = complement_mask.generate_mask(XY)
+        complement_masked_data = ma.array(self.data, copy=False)
+        complement_masked_data.mask = np.logical_or(complement_mask_array, self.mask.current)
+        return complement_masked_data.mean()
 
     def _check_image_compatible(self, other):
         if not isinstance(self, type(other)):
@@ -547,10 +556,14 @@ class ImageStack2D(ImageStackBase):
         """
         images = []
         for layer in range(self.n_layers):
-            sliced_image = self.slice_z(z_index=layer)            
+            sliced_image = self.slice_z(z_index=layer)
             sliced_image.remove_gaussian()
             images.append(sliced_image)
         return ImageStack2D.from_image_list(images)
+
+
+
+
 
 
     @classmethod
@@ -589,6 +602,22 @@ class ImageStack2D(ImageStackBase):
         y_length = self.y.size
         y_mid = int((y_length-1)/2)
         return self.masked_data[x_mid, y_mid, :]
+
+    def average_edge_data(self):
+        """
+        return average value of masked data close to mask edge.
+
+        Returns
+        -------
+        np.ndarray<N,>(float)
+          - the average value of the edge data in the N layers
+        """
+        edge_average = np.zeros(self.n_layers)
+        for layer in range(self.n_layers):
+            sliced_image = self.slice_z(z_index=layer)
+            edge_average[layer] = sliced_image.average_edge_data()
+        return edge_average
+
 
     # def flux(self, xy_scale=1.0):
     #     flux = np.zeros_like(self.z)
@@ -645,7 +674,7 @@ class ImageStack2D(ImageStackBase):
                                                         position=position,
                                                         use_masked=use_masked)
             images.append(im_1d)
-        return ImageStack1D.from_image_list(images)    
+        return ImageStack1D.from_image_list(images)
 
 class BasisDecomposition2D(ImageStack2D):
     """
