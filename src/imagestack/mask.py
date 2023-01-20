@@ -16,6 +16,28 @@ def copy_mask(mask):
     else:
         raise ValueError("wrong object type for mask generation: {}".format(type(mask)))
 
+def get_complement(region):
+    """
+    returns a region wich is the complement of the input region
+
+    Parameters
+    ----------
+    region: str
+      the region for which to take the complement
+
+    Returns
+    -------
+    complement: str
+      the region which describes the complement of region
+    """
+    if region == "center":
+        return "edge"
+    elif region == "edge":
+        return "center"
+    elif region == "none":
+        return "none"
+
+
 class Mask2D():
 
     """
@@ -49,9 +71,14 @@ class Mask2D():
         self.constraint = constraint
         self.current = None
 
+
     @classmethod
-    def from_mask(Mask1D, other):
-        new_mask = Mask2D(other.shape, other.region, np.array(other.constraint))
+    def from_mask(Mask2D, other, complement=False):
+        if complement:
+            region = get_complement(other.region)
+        else:
+            region = other.region
+        new_mask = Mask2D(other.shape, region, np.array(other.constraint))
         new_mask.polar = other.polar
         return new_mask
 
@@ -145,8 +172,14 @@ class Mask1D():
         self.current = None
 
     @classmethod
-    def from_mask(Mask1D, other):
-        return Mask1D(other.shape, other.region, other.constraint)
+    def from_mask(Mask1D, other, complement=False):
+        if complement:
+            region = get_complement(other.region)
+        else:
+            region = other.region
+        new_mask = Mask1D(other.shape, region, np.array(other.constraint))
+        return new_mask
+
 
     def __repr__(self):
         return "Mask1D({},{},{})".format(self.shape, self.region, self.constraint)
