@@ -2,9 +2,9 @@ import numpy as np
 from numpy import ma
 from abc import ABC, abstractmethod
 import scipy.optimize
-import image_stack.utils as utils
+import imagestack.utils as utils
 import matplotlib.pyplot as plt
-from image_stack.statistics import InformationCriteria, information_criterion
+from imagestack.statistics import InformationCriteria, information_criterion
 
 def create_model(model_name, plot):
     if model_name == 'gaussian':
