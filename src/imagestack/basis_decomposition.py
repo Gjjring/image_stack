@@ -1,6 +1,6 @@
 import numpy as np
-from imagestack.image1D import ImageStack1D
-from imagestack.image2D import ImageStack2D
+from imagestack.image1d import ImageStack1D
+from imagestack.image2d import ImageStack2D
 from imagestack.mask import Mask1D, Mask2D
 class BasisDecomposition():
 
