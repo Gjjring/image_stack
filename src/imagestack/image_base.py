@@ -7,6 +7,7 @@ from imagestack.mask import mask_from_data, copy_mask
 #from imagestack.basis_decomposition import BasisDecomposition
 from imagestack.utils import is_iterable
 from imagestack.basis_functions import BasisFunctions
+from imagestack import basis_functions
 from imagestack.focal import FocalPlane
 from imagestack.statistics import (InformationCriteria, information_criterion,
                                     residuals)
@@ -263,16 +264,18 @@ class ImageBase(ABC):
 
 
     @staticmethod
-    def empty_fit_output(n_modes):
+    def empty_fit_output(modes):
         """
         create struct with correct fields for basis fit output
 
         Parameters
         ----------
-        n_modes: int
-            number of modes in the basis fit
+        modes: np.ndarray<N,>(int)
+            the modes in the basis fit
         """
+        n_modes = modes.size
         fit_output = {}
+        fit_output['modes'] = modes
         fit_output['projected_coefficients'] = np.zeros((n_modes))
         fit_output['fitted_coefficients'] = np.zeros((n_modes))
         fit_output['std_devs'] = np.zeros((n_modes))
@@ -293,7 +296,9 @@ class ImageBase(ABC):
             the information criteria to be minimized
         """
         n_modes = int(n_modes)
-        fit_output = self.fit_basis(basis, int(n_modes))
+        mode_start = basis_functions.mode_start(basis)
+        modes = np.arange(mode_start, mode_start+n_modes, dtype=np.int64)
+        fit_output = self.fit_basis(basis, modes)
         residual = fit_output['squared_residuals']
         n_data_points = ma.count(self.masked_data)
         return information_criterion(residual, n_modes, n_data_points, criterion)
@@ -656,22 +661,22 @@ class ImageStackBase(ABC):
 
         return focus_estimate
 
-    def fit_basis(self, basis, n_modes):
+    def fit_basis(self, basis, modes):
         """
-        fit n modes of a basis to the masked images in the stack
+        fit modes of a basis to the masked images in the stack
 
         Parameters
         ----------
         basis: BasisFunctions Enum
             the basis to use for fitting
-        n_modes: sequence of int values
-            the number of basis functions to use for each stack
+        modes: sequence of np.ndarray<N,>(int) values
+            the modes of the basis function per layer
         """
-        if not len(n_modes) == self.z.size:
+        if not len(modes) == self.z.size:
             raise ValueError("n_modes must have same length as layers in stack")
         all_fit_outputs = []
         for layer in range(self.n_layers):
-            fit_output = self.slice_z(z_index=layer).fit_basis(basis, n_modes[layer])
+            fit_output = self.slice_z(z_index=layer).fit_basis(basis, modes[layer])
             all_fit_outputs.append(fit_output)
         return all_fit_outputs
 

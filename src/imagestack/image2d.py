@@ -331,22 +331,22 @@ class Image2D(ImageBase):
         fit_output['fitted_image'] = Image2D(fitted_data, self.x, self.y, self.z)
         fit_output['fitted_image'].apply_mask(self.mask)
 
-    def fit_basis(self, basis, n_modes):
+    def fit_basis(self, basis, modes):
         """
-        fit n modes of a basis to the masked image
+        fit modes of a basis to the masked image
 
         Parameters
         ----------
         basis: BasisFunctions Enum
             the basis to use for fitting
-        n_modes: int
-            the number of basis functions to use
+        modes: np.ndarray<N,>(int)
+            the modes of the basis functions to use
         """
         is_polar = basis_functions.is_polar(basis)
-        mode_start = basis_functions.mode_start(basis)
-        modes = np.arange(mode_start, mode_start+n_modes, dtype=np.int64)
+        #mode_start = basis_functions.mode_start(basis)
+        #modes = np.arange(mode_start, mode_start+n_modes, dtype=np.int64)
         bd = BasisDecomposition2D(basis, modes, self.x, self.y, self.mask)
-        fit_output = Image2D.empty_fit_output(n_modes)
+        fit_output = Image2D.empty_fit_output(modes)
         projected_coefficients = self._basis_projection(bd, fit_output)
         self._optimize_projection(bd, fit_output)
         return fit_output
@@ -469,7 +469,7 @@ class ImageStack2D(ImageStackBase):
         return image_stack2D
 
     @classmethod
-    def from_basis(image_stack2D, basis, n_min, n_max, x, y):
+    def from_basis(image_stack2D, basis, modes, x, y):
         """
         returns an ImageStack2D of a basis function of evaluated on x/y.
 
@@ -487,8 +487,10 @@ class ImageStack2D(ImageStackBase):
             the positions over which to evaluate the basis functions
         """
         polar = basis_functions.is_polar(basis)
-        n_modes = n_max-n_min
-        data = np.zeros((x.size, y.size, n_modes+1))
+        #n_modes = n_max-n_min
+        n_modes = modes.size
+        #n_modes = modes.size
+        data = np.zeros((x.size, y.size, n_modes))
         X, Y = np.meshgrid(x, y, indexing='ij')
         if polar:
             R = np.sqrt(X**2 + Y**2)
@@ -498,7 +500,7 @@ class ImageStack2D(ImageStackBase):
         else:
             dimension1 = X
             dimension2 = Y
-        modes = np.array(list(range(n_min, n_max+1)), dtype=np.int64)
+        #modes = np.array(list(range(n_min, n_max+1)), dtype=np.int64)
         basis_func = basis_functions.function(basis)
         for ii, mode in enumerate(modes):
             data[..., ii] = basis_func(mode, dimension1, dimension2)
@@ -720,8 +722,7 @@ class BasisDecomposition2D(ImageStack2D):
         return normed_x, normed_y
 
     def init_basis(self, x, y):
-        return ImageStack2D.from_basis(self.basis, self.modes[0],
-                                       self.modes[-1], x, y).data
+        return ImageStack2D.from_basis(self.basis, self.modes, x, y).data
 
     def image_from_coefficients(self, coefficients):
         stacked_image_data = (coefficients*self.masked_data)

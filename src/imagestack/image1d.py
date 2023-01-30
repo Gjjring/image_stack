@@ -304,7 +304,7 @@ class ImageStack1D(ImageStackBase):
         raise ValueError("Image1D does not have cylindrical dimensions")
 
     @classmethod
-    def from_basis(image_stack1D, basis, n_min, n_max, x):
+    def from_basis(image_stack1D, basis, modes, x):
         """
         returns a ImageStack1D of a basis function of various orders evaluated on x
 
@@ -319,11 +319,11 @@ class ImageStack1D(ImageStackBase):
         x: nd.array<float>(N,)
             the positions over which to evaluate the basis functions
         """
-        n_modes = n_max-n_min
+        n_modes = modes.size
         data = np.zeros((x.size, n_modes+1))
         dimension1 = x
         len_x = x.size
-        modes = np.array(list(range(n_min, n_max+1)), dtype=np.int64)
+        #modes = np.array(list(range(n_min, n_max+1)), dtype=np.int64)
         basis_func = basis_functions.function(basis)
         for ii, mode in enumerate(modes):
             data[:, ii] = basis_func(mode, dimension1)
@@ -447,8 +447,7 @@ class BasisDecomposition1D(ImageStack1D):
         return normed_x
 
     def init_basis(self, x):
-        return ImageStack1D.from_basis(self.basis, self.modes[0],
-                                       self.modes[-1], x).data
+        return ImageStack1D.from_basis(self.basis, self.modes, x).data
 
     def image_from_coefficients(self, coefficients):
         stacked_image_data = (coefficients*self.masked_data)
