@@ -136,7 +136,7 @@ class ModelBase(ABC):
             if len(label_str) > 47:
                 label_str += "..."
                 break
-        plt.pcolormesh(x, y, data, label=label_str)
+        plt.pcolormesh(x, y, data, label=label_str, shading='gouraud')
 
 
 class GaussianModel(ModelBase):
@@ -209,8 +209,9 @@ class GaussianModel2D(ModelBase):
 
     def _init_params(self, x, y, data):
         a = np.amax(data)-np.amin(data)
-        b = x[np.where(np.isclose(data, np.amax(data)))][0]
-        c = y[np.where(np.isclose(data, np.amax(data)))][0]
+        indices = np.where(np.isclose(data, np.amax(data)))
+        b = x[np.where(np.isclose(data, np.amax(data)))[0], 0][0]
+        c = y[0, np.where(np.isclose(data, np.amax(data)))[1]][0]
         x_range = np.amax(x)-np.amin(x)
         d = x_range*0.5
         e = np.amin(data)
