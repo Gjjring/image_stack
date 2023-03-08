@@ -11,6 +11,8 @@ def create_model(model_name, plot):
         return GaussianModel(plot)
     if model_name == 'polynomial':
         return Polynomial(plot)
+    if model_name == 'tophate':
+        return TophatModel(plot)
     else:
         raise ValueError("invalid model name: {}".format(model_name))
 
@@ -311,6 +313,72 @@ class CenteredGaussianModel(GaussianModel):
         bounds.append((0., 0., -np.max(data)))
         bounds.append((np.inf, z_range*2, np.max(data)))
         return bounds
+
+class TophatModel(GaussianModel):
+    """
+    model with four parameters: center, height and width and zero level of
+    tophat function
+    """
+
+    def __init__(self, plot):
+        super().__init__(plot)
+        self.__parameters = {}
+        self.n_parameters = 4
+
+    def _init_params(self, z, data):
+        a = (np.max(z)+np.amin(z))*0.5
+        b = np.max(data)-np.min(data)
+        z_range = np.max(z)-np.min(z)
+        c = z_range*0.5
+        d = np.amin(data)
+        self.parameters = [a, b, c, d]
+
+    @property
+    def parameters(self):
+        return self.__parameters
+
+    @parameters.setter
+    def parameters(self, params):
+        self.__parameters['a'] = params[0]
+        self.__parameters['b'] = params[1]
+        self.__parameters['c'] = params[2]
+        self.__parameters['d'] = params[3]
+
+    def evaluate(self, z):
+        a = self.parameters['a']
+        b = self.parameters['b']
+        c = self.parameters['c']
+        d = self.parameters['d']
+        return utils.tophat([a, b, c, d], z)
+
+    def get_bounds(self, z, data):
+        z_range = np.max(z)-np.min(z)
+        data_range = np.amax(data) - np.amin(data)
+        bounds = []
+        bounds.append((np.amin(z), 0, 0., np.amin(data)-data_range*0.1))
+        bounds.append((np.amax(z), data_range*1.2, z_range, np.amin(data)+data_range*0.1))
+        return bounds
+
+    def fit_parameters(self, z, data, init_params=None):
+        if init_params is None:
+            self._init_params(z, data)
+        else:
+            self.parameters = init_params
+        start_vals = list(self.parameters.values())
+        minimize_func = lambda x : self.residuals(x, z, data)
+        bounds = self.get_bounds(z, data)
+        res = scipy.optimize.least_squares(minimize_func,
+                                            method='trf',
+                                            loss='linear',
+                                            x0=start_vals,
+                                            bounds=bounds)
+
+        self.parameters = res['x']
+        if self.plot:
+            self._plot_focal_function(z, self.evaluate(z))
+        squared_residuals = np.sum(np.abs(np.power(self.residuals(res['x'], z, data), 2)))
+        center_estimate = res['x'][0]
+        return center_estimate, squared_residuals, z.size
 
 
 class Polynomial(ModelBase):
