@@ -17,6 +17,8 @@ def information_criterion(residual, n_params, n_data_points, criterion):
 
 
     """
+    reduced_chi_squared = residual/(n_data_points-n_params)
+    residual = reduced_chi_squared
     if criterion == InformationCriteria.BIC:
         return bic(residual, n_params, n_data_points)
     elif criterion == InformationCriteria.AIC:
