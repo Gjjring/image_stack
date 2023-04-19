@@ -406,7 +406,7 @@ class ImageStack1D(ImageStackBase):
         edge_average = np.zeros(self.n_layers)
         for layer in range(self.n_layers):
             sliced_image = self.slice_z(z_index=layer)
-            edge_average[layer] = sliced_image.edge_average_data()
+            edge_average[layer] = sliced_image.average_edge_data()
         return edge_average
 
 
