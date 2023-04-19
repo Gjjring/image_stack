@@ -41,17 +41,18 @@ def plot_image_difference_2D(axes, image1, image2, length_scale,
     cbs = []
     for ii, ax, image in zip(range(3), axes, images):
         if ii < 2:
-            vmin = image1.min()
-            vmax = image1.max()
+            this_vmin = image1.min()
+            this_vmax = image1.max()
         else:
-            vmin = None
-            vmax = None
+            this_vmin = vmin
+            this_vmax = vmax
         if colormaps == None:
             cmap = None
         else:
             cmap = colormaps[ii]
 
-        plot_image2D(ax, image, xy_scale=length_scale, vmin=vmin, vmax=vmax)
+        plot_image2D(ax, image, xy_scale=length_scale, vmin=this_vmin,
+                     vmax=this_vmax)
         plt.set_cmap(cmap)
         plt.xlim(np.array(image.xlim())*length_scale)
         plt.ylim(np.array(image.ylim())*length_scale)
