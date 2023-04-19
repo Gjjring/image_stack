@@ -2,6 +2,7 @@ import numpy as np
 from numpy import ma
 from abc import ABC, abstractmethod
 import scipy.optimize
+import scipy.interpolate
 import imagestack.statistics
 from imagestack.mask import mask_from_data, copy_mask
 #from imagestack.basis_decomposition import BasisDecomposition
@@ -304,7 +305,8 @@ class ImageBase(ABC):
         return information_criterion(residual, n_modes, n_data_points, criterion)
 
     def optimise_basis_size(self, basis, max_n_modes, min_n_modes=20,
-                            criterion=InformationCriteria.BIC):
+                            criterion=InformationCriteria.BIC,
+                            approximate=False):
         """
         Find the optimal number of basis coefficients for expanasion of the image
 
@@ -329,18 +331,31 @@ class ImageBase(ABC):
                                                             criterion)
         #print("bounds: {}".format((min_n_modes, max_n_modes)))
         #return
-        res = scipy.optimize.minimize_scalar(obj_fun,
-                                       bounds=(min_n_modes, max_n_modes),
-                                       method='bounded',
-                                       options={'maxiter':20,
-                                                'xatol':0.5,
-                                                'disp':False})
-        # attempted global minimizer but didnt seem to work:
-        #res = scipy.optimize.shgo(obj_fun, bounds=[(min_n_modes, max_n_modes)],
-        #                            options={'maxiter':100,
-        #                                     'xatol':0.5,
-        #                                     'disp':True})
-        max_n_modes_required = int(res['x'])
+        if approximate == False:
+            res = scipy.optimize.minimize_scalar(obj_fun,
+                                                 bounds=(min_n_modes, max_n_modes),
+                                                 method='bounded',
+                                                 options={'maxiter':20,
+                                                          'xatol':0.5,
+                                                          'disp':False})
+            # attempted global minimizer but didnt seem to work:
+            #res = scipy.optimize.shgo(obj_fun, bounds=[(min_n_modes, max_n_modes)],
+            #                            options={'maxiter':100,
+            #                                     'xatol':0.5,
+            #                                     'disp':True})
+            max_n_modes_required = int(res['x'])
+        else:
+            coarse_range = np.linspace(min_n_modes, max_n_modes, 5, dtype=np.int64)
+            obj_values = np.zeros(coarse_range.size)
+            for ii, n_modes in enumerate(coarse_range):
+                obj_values[ii] = obj_fun(n_modes)
+            fine_range = np.arange(min_n_modes, max_n_modes+1, dtype=np.int64)
+            interp = scipy.interpolate.interp1d(coarse_range, obj_values, kind='cubic')
+            fine_values = interp(fine_range)
+            min_index = np.where(np.isclose(fine_values,
+                                            np.amin(fine_values)))
+            max_n_modes_required = fine_range[min_index[0][0]]
+            
         return max_n_modes_required
 
 
@@ -456,7 +471,7 @@ class ImageStackBase(ABC):
         else:
             max_val = np.max(self.masked_data)
             if edge_min:
-                min_val = self.average_edge_data()
+                min_val = np.amin(self.average_edge_data())
             else:
                 min_val = np.min(self.masked_data)
             self.data = (self.data-min_val)/(max_val-min_val)
@@ -620,7 +635,8 @@ class ImageStackBase(ABC):
         return flux_vals
 
     def optimise_basis_size(self, basis, max_n_modes, min_n_modes=20,
-                            criterion=InformationCriteria.BIC):
+                            criterion=InformationCriteria.BIC,
+                            approximate=False):
         """
         Find the optimal number of basis coefficients for expanasion of the image
 
@@ -641,8 +657,9 @@ class ImageStackBase(ABC):
         for layer in range(self.n_layers):
             image = self.slice_z(layer)
             required_n_modes = image.optimise_basis_size(basis, max_n_modes,
-                                                    min_n_modes=min_n_modes,
-                                                    criterion=criterion)
+                                                         min_n_modes=min_n_modes,
+                                                         criterion=criterion,
+                                                         approximate=approximate)
             all_required_modes[layer] = required_n_modes
         return all_required_modes
 
