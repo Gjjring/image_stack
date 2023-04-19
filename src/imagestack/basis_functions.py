@@ -5,18 +5,21 @@ from enum import Enum
 
 class BasisFunctions(Enum):
     LEGENDRE1D = 0
-    LEGENDRE2D = 1
-    ZERNIKE = 2
-    ZERNIKE_FRINGE = 2
-    ZERNIKE_OSA = 3
-    ZERNIKE_FRINGE_CONSTRAINED = 4
-    CHEBYSHEV = 5
+    LEGENDRE1DX = 1
+    LEGENDRE1DY = 2
+    ZERNIKE = 3
+    ZERNIKE_FRINGE = 3
+    ZERNIKE_OSA = 4
+    ZERNIKE_FRINGE_CONSTRAINED = 5
+    CHEBYSHEV = 6
 
 def function(basis_function):
     if basis_function == BasisFunctions.LEGENDRE1D:
         return legendre1D
-    elif basis_function == BasisFunctions.LEGENDRE2D:
-        return legendre2D
+    elif basis_function == BasisFunctions.LEGENDRE1DX:
+        return legendre1DX
+    elif basis_function == BasisFunctions.LEGENDRE1DY:
+        return legendre1DY
     elif basis_function == BasisFunctions.ZERNIKE:
         return zernike_fringe
     elif basis_function == BasisFunctions.ZERNIKE_OSA:
@@ -31,7 +34,9 @@ def function(basis_function):
 def is_polar(basis_function):
     if basis_function == BasisFunctions.LEGENDRE1D:
         return False
-    elif basis_function == BasisFunctions.LEGENDRE2D:
+    elif basis_function == BasisFunctions.LEGENDRE1DX:
+        return False
+    elif basis_function == BasisFunctions.LEGENDRE1DY:
         return False
     elif basis_function == BasisFunctions.ZERNIKE:
         return True
@@ -47,7 +52,9 @@ def is_polar(basis_function):
 def mode_start(basis_function):
     if basis_function == BasisFunctions.LEGENDRE1D:
         return 0
-    elif basis_function == BasisFunctions.LEGENDRE2D:
+    elif basis_function == BasisFunctions.LEGENDRE1DX:
+        return 0
+    elif basis_function == BasisFunctions.LEGENDRE1DY:
         return 0
     elif basis_function == BasisFunctions.ZERNIKE:
         return 1
@@ -86,6 +93,34 @@ def legendre1D(n, x):
         1d array of x positions
     """
     leg = eval_legendre(n, x)
+    return leg
+
+def legendre1DX(n, x, y):
+    """
+    Evaluates legendre polynomial of order n in 1 dimension
+
+    Parameters
+    ----------
+    n: int
+        order of polynomial
+    x: np.ndarray<float>(N,)
+        1d array of x positions
+    """
+    leg = eval_legendre(n, x)
+    return leg
+
+def legendre1DY(n, x, y):
+    """
+    Evaluates legendre polynomial of order n in 1 dimension
+
+    Parameters
+    ----------
+    n: int
+        order of polynomial
+    x: np.ndarray<float>(N,)
+        1d array of x positions
+    """
+    leg = eval_legendre(n, y)
     return leg
 
 def legendre2D(n, x, y):
