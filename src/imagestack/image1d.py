@@ -100,9 +100,14 @@ class Image1D(ImageBase):
             img_stack = image1D(file_data['data'], file_data['x'],
                                       file_data['z'])
             if 'mask_shape' in file_data:
+                if 'mask_origin' in file_data:
+                    origin = file_data['mask_origin']
+                else:
+                    origin = None
                 img_stack.set_mask(file_data['mask_shape'],
                                    file_data['mask_region'],
-                                   file_data['mask_constraint'])
+                                   file_data['mask_constraint'],
+                                   origin=origin)
         return img_stack
 
 
@@ -216,7 +221,7 @@ class Image1D(ImageBase):
         fit_output['fitted_image'] = Image1D(fitted_data, self.x, self.z)
         fit_output['fitted_image'].apply_mask(self.mask)
 
-    def fit_basis(self, basis, n_modes):
+    def fit_basis(self, basis, modes):
         """
         fit n modes of a basis to the masked image
 
@@ -228,13 +233,13 @@ class Image1D(ImageBase):
             the number of basis functions to use
         """
         is_polar = basis_functions.is_polar(basis)
-        mode_start = basis_functions.mode_start(basis)
-        modes = np.arange(mode_start, mode_start+n_modes, dtype=np.int64)
+        #mode_start = basis_functions.mode_start(basis)
+        #modes = np.arange(mode_start, mode_start+n_modes, dtype=np.int64)
         if is_polar:
             raise ValueError("polar basis functions incompatible with 1D image")
 
         bd = BasisDecomposition1D(basis, modes, self.x, self.mask)
-        fit_output = ImageBase.empty_fit_output(n_modes)
+        fit_output = ImageBase.empty_fit_output(modes)
         projected_coefficients = self._basis_projection(bd, fit_output)
         self._optimize_projection(bd, fit_output)
         return fit_output
@@ -320,7 +325,7 @@ class ImageStack1D(ImageStackBase):
             the positions over which to evaluate the basis functions
         """
         n_modes = modes.size
-        data = np.zeros((x.size, n_modes+1))
+        data = np.zeros((x.size, n_modes))
         dimension1 = x
         len_x = x.size
         #modes = np.array(list(range(n_min, n_max+1)), dtype=np.int64)
@@ -364,9 +369,14 @@ class ImageStack1D(ImageStackBase):
             img_stack = image_stack1D(file_data['data'], file_data['x'],
                                       file_data['z'])
             if 'mask_shape' in file_data:
+                if 'mask_origin' in file_data:
+                    origin = file_data['mask_origin']
+                else:
+                    origin = None
                 img_stack.set_mask(file_data['mask_shape'],
                                    file_data['mask_region'],
-                                   file_data['mask_constraint'])
+                                   file_data['mask_constraint'],
+                                   origin=origin)
         return img_stack
 
 

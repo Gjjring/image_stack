@@ -7,8 +7,10 @@ from imagestack import basis_functions
 from imagestack.image1d import Image1D, ImageStack1D
 from imagestack.mask import Mask2D
 import scipy.optimize
+from scipy import ndimage
 from imagestack.statistics import residuals
 from copy import copy
+
 
 class Image2D(ImageBase):
 
@@ -131,9 +133,14 @@ class Image2D(ImageBase):
             img_stack = image2D(file_data['data'], file_data['x'],
                                       file_data['y'], file_data['z'])
             if 'mask_shape' in file_data:
+                if 'mask_origin' in file_data:
+                    origin = file_data['mask_origin']
+                else:
+                    origin = None
                 img_stack.set_mask(file_data['mask_shape'],
                                    file_data['mask_region'],
-                                   file_data['mask_constraint'])
+                                   file_data['mask_constraint'],
+                                   origin=origin)
         return img_stack
 
 
@@ -172,22 +179,35 @@ class Image2D(ImageBase):
         if dimension == 'x':
             if use_masked:
                 new_data = self.masked_data.mean(axis=0)
+                if self.mask.polar:
+                    constraint = self.mask.constraint
+                else:
+                    constraint = self.mask.constraint[0]
             else:
                 new_data = self.data.mean(axis=0)
             new_x = self.y
             new_y = np.array([0.])
+            origin = self.mask.origin[0]
         elif dimension == 'y':
             if use_masked:
                 new_data = self.masked_data.mean(axis=1)
+                if self.mask.polar:
+                    constraint = self.mask.constraint
+                else:
+                    constraint = self.mask.constraint[0]                
             else:
                 new_data = self.data.mean(axis=1)
             new_x = self.x
             new_y = np.array([0.])
+            origin = self.mask.origin[1]
         else:
             raise ValueError("dimension must by either x or y", +
                              " ,value was: {}".format(dimension))
         #print("new_data.shape: {}".format(new_data.shape))
-        return Image1D(new_data, new_x, self.z)
+        image1d = Image1D(new_data, new_x, self.z)
+        if use_masked:
+            image1d.set_mask("window", self.mask.region, constraint, origin=origin)
+        return image1d
 
     def slice_dimension(self, dimension='y', position=0., use_masked=False):
         """
@@ -424,6 +444,10 @@ class Image2D(ImageBase):
         if not np.all(np.isclose(self_masked_Y.compressed(), other_masked_Y.compressed())):
             raise ValueError("cannot compare images with different unmasked y positions")
 
+    def rotate(self, angle):
+        rotated_data = ndimage.rotate(self.data, angle, reshape=False)
+        self.data = rotated_data
+
 class ImageStack2D(ImageStackBase):
 
     def __init__(self, data, x, y, z):
@@ -580,9 +604,14 @@ class ImageStack2D(ImageStackBase):
             img_stack = image_stack2D(file_data['data'], file_data['x'],
                                       file_data['y'], file_data['z'])
             if 'mask_shape' in file_data:
+                if 'mask_origin' in file_data:
+                    origin = file_data['mask_origin']
+                else:
+                    origin = None
                 img_stack.set_mask(file_data['mask_shape'],
                                    file_data['mask_region'],
-                                   file_data['mask_constraint'])
+                                   file_data['mask_constraint'],
+                                   origin=origin)
         return img_stack
 
 
@@ -678,6 +707,14 @@ class ImageStack2D(ImageStackBase):
             images.append(im_1d)
         return ImageStack1D.from_image_list(images)
 
+    def rotate(self, angle):
+        new_data = np.zeros_like(self.data)
+        for layer in range(self.n_layers):
+            sliced_image = self.slice_z(z_index=layer)
+            rotated_data = ndimage.rotate(sliced_image.data, angle, reshape=False)
+            new_data[:, :, layer] = rotated_data
+        self.data = new_data
+
 class BasisDecomposition2D(ImageStack2D):
     """
     Fit a set of basis functions to 2D image data
@@ -707,7 +744,7 @@ class BasisDecomposition2D(ImageStack2D):
         if not isinstance(modes, np.ndarray):
             raise AttributeError("modes must by numpy.ndarray")
         super().__init__(data, x, y, modes.astype(float))
-        self.mask = mask
+        self.apply_mask(mask=mask)
 
     @staticmethod
     def normalise_dimensions(x, y, mask):
@@ -737,14 +774,17 @@ class BasisDecomposition2D(ImageStack2D):
                                      x0=start_vals,
                                      Dfun = jacob_fun,
                                      full_output=True)
+        
         return res
 
     def err_fun(self, x):
         img = self.image_from_coefficients(x)
         diff = img - self.image_data
+        #print("error function output: {}".format(np.amax(diff.ravel())))
         return diff.ravel()
 
     def err_fun_jac(self, x):
         sliced_data = self.masked_data
         X = self.get_cart_dimensions()[0]
+        #print("jacobian output: {}".format(np.amax(sliced_data.flatten())) )
         return sliced_data.reshape(X.size, self.modes.size)

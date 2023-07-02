@@ -54,7 +54,8 @@ class Mask2D():
     """
 
 
-    def __init__(self, shape, region, constraint):
+    def __init__(self, shape, region, constraint,
+                 origin=np.array([0., 0.])):
         """
         Parameters
         ----------
@@ -70,6 +71,7 @@ class Mask2D():
         self.region = region
         self.constraint = constraint
         self.current = None
+        self.origin = origin
 
 
     @classmethod
@@ -110,7 +112,7 @@ class Mask2D():
         return mask
 
     def _get_circular_mask(self, X, Y):
-        R = np.sqrt(X**2 + Y**2)
+        R = np.sqrt((X-self.origin[0])**2 + (Y-self.origin[1])**2)
         radius = self.constraint
         if self.region == 'center':
             mask = R<radius
@@ -123,14 +125,14 @@ class Mask2D():
         return mask
 
     def _get_rectangular_mask(self, X, Y):
-        R = np.sqrt(X**2 + Y**2)
+        #R = np.sqrt(X**2 + Y**2)
         xy_width = self.constraint
         if self.region == 'center':
-            mask = np.abs(X) < xy_width[0]
-            mask += np.abs(Y) < xy_width[1]
+            mask = np.abs(X-self.origin[0]) < xy_width[0]
+            mask += np.abs(Y-self.origin[1]) < xy_width[1]
         elif self.region =='edge':
-            mask = np.abs(X) > xy_width[0]
-            mask += np.abs(Y) > xy_width[1]
+            mask = np.abs(X-self.origin[0]) > xy_width[0]
+            mask += np.abs(Y-self.origin[1]) > xy_width[1]
         elif self.region =='none':
             mask = np.full(X.shape, False, dtype=bool)
         else:
@@ -155,7 +157,7 @@ class Mask1D():
     """
 
 
-    def __init__(self, shape, region, constraint):
+    def __init__(self, shape, region, constraint, origin=0.):
         """
         Parameters
         ----------
@@ -170,6 +172,7 @@ class Mask1D():
         self.region = region
         self.constraint = constraint
         self.current = None
+        self.origin = origin
 
     @classmethod
     def from_mask(Mask1D, other, complement=False):
@@ -207,9 +210,9 @@ class Mask1D():
     def _get_window_mask(self, x):
         x_width = self.constraint
         if self.region == 'center':
-            mask = np.abs(x) < x_width
+            mask = np.abs(x-self.origin) < x_width
         elif self.region =='edge':
-            mask = np.abs(x) > x_width
+            mask = np.abs(x-self.origin) > x_width
         elif self.region =='none':
             mask = np.full(x.shape, False, dtype=bool)
         else:

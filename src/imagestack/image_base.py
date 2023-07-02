@@ -74,10 +74,12 @@ class ImageBase(ABC):
         noise = np.random.normal(0, noise_level, self.data.size).reshape(self.data.shape)
         self.data += noise
 
-    def set_mask(self, shape, region, constraint):
+    def set_mask(self, shape, region, constraint, origin=None):
         self.mask.shape = shape
         self.mask.region = region
         self.mask.constraint = constraint
+        if origin is not None:
+            self.mask.origin = origin
         #mask = self.mask.generate_mask(self.get_cart_dimensions())
         self.apply_mask()
 
@@ -102,15 +104,20 @@ class ImageBase(ABC):
         flux = self.flux(xy_scale=xy_scale)
         self.data = self.data/flux
 
-    def normalise_range(self, edge_min=False):
+    def normalise_range(self, edge_min=False, edge_max=False):
         """
         normalise the data such that the data lie between 0. and 1.
         """
-        max_val = np.amax(self.masked_data)
+        
         if edge_min:
             min_val = self.average_edge_data()
         else:
             min_val = np.amin(self.masked_data)
+        if edge_max:
+            max_val = self.average_edge_data()
+        else:
+            max_val = np.amax(self.masked_data)
+            
         if np.isclose(np.abs(max_val-min_val), 0.):
             raise ValueError("cannot normalise range with equal maximum and" +
                              " minimum value")
@@ -414,10 +421,12 @@ class ImageStackBase(ABC):
         noise = np.random.normal(0, noise_level, self.data.size).reshape(self.data.shape)
         self.data += noise
 
-    def set_mask(self, shape, region, constraint):
+    def set_mask(self, shape, region, constraint, origin=None):
         self.mask.shape = shape
         self.mask.region = region
         self.mask.constraint = constraint
+        if origin is not None:
+            self.mask.origin = origin
         mask = self.mask.generate_mask(self.get_cart_dimensions())
         self.apply_mask()
 
@@ -452,28 +461,39 @@ class ImageStackBase(ABC):
             flux = image.flux(xy_scale=xy_scale)
             self.data[..., layer] /= flux
 
-    def normalise_range(self, layer_by_layer=True, edge_min=False):
+    def normalise_range(self, layer_by_layer=True, edge_min=False, edge_max=False):
         """
         normalise the data such that the data lie between 0. and 1.
         """
         if layer_by_layer:
             for layer in range(self.n_layers):
                 image = self.slice_z(z_index=layer)
-                max_val = np.max(image.masked_data)
+
                 if edge_min:
                     min_val = image.average_edge_data()
                 else:
                     min_val = np.min(image.masked_data)
+
+                if edge_max:
+                    max_val = image.average_edge_data()
+                else:
+                    max_val = np.max(image.masked_data)
+                    
+                    
                 if np.isclose(np.abs(max_val-min_val), 0.):
                     raise ValueError("cannot normalise range with equal maximum and" +
                                      " minimum value")
                 self.data[..., layer] = (self.data[..., layer]-min_val)/(max_val-min_val)
         else:
-            max_val = np.max(self.masked_data)
+
             if edge_min:
                 min_val = np.amin(self.average_edge_data())
             else:
                 min_val = np.min(self.masked_data)
+            if edge_max:
+                max_val = np.amin(self.average_edge_data())
+            else:
+                max_val = np.max(self.masked_data)                
             self.data = (self.data-min_val)/(max_val-min_val)
 
     def normalise_highest(self):
