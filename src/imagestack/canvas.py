@@ -69,7 +69,7 @@ def plot_image_difference_1D(axes, image1, image2, length_scale):
         plot_image(ax, image, length_scale=length_scale)
         plt.xlim(np.array(image.xlim())*length_scale)
 
-def plot_image1D(ax, image, x_scale=1.0, color=None, ls='-'):
+def plot_image1D(ax, image, x_scale=1.0, color=None, ls='-', marker=None):
     x = image.x*x_scale
     plt.sca(ax)
     if color is None:
@@ -77,7 +77,8 @@ def plot_image1D(ax, image, x_scale=1.0, color=None, ls='-'):
         #print(type(color_cycler))
         #color = next(color_cycler)
         color = next(ax._get_lines.prop_cycler)['color']
-    return plt.plot(x, image.masked_data, label=image.label, color=color, ls=ls)
+    return plt.plot(x, image.masked_data, label=image.label, color=color, ls=ls,
+                    marker=marker)
 
 def plot_image2D(ax, image, xy_scale=1.0, vmin=None, vmax=None):
     X, Y = image.get_cart_dimensions()
@@ -99,7 +100,7 @@ def plot_image_through_focus(ax, image, x_scale=1.0, z_scale=1.0,
     elif color_scale == 'log':
         plot_data = np.log10(image.masked_data)
     plt.pcolormesh(X, Z, plot_data, shading='nearest',
-                    vmin=vmin, vmax=vmax, cmap='Greys_r')
+                    vmin=vmin, vmax=vmax)
 
 def plot_image2D_stacked(ax, image_stack, xy_scale=1.0, z_scale=1.0,
                          vmin=None, vmax=None):
