@@ -139,6 +139,14 @@ class Mask2D():
             raise ValueError("mask region name {} invalid".format(self.region))
         return mask
 
+    def min_constraint(self):
+        try:
+            min_val = np.amin(self.constraint)
+        except:
+            min_val = self.constraint
+        return min_val
+
+
 
 
 class Mask1D():
@@ -218,3 +226,7 @@ class Mask1D():
         else:
             raise ValueError("mask region name {} invalid".format(self.region))
         return mask
+
+    def min_constraint(self):
+        min_val = self.constraint
+        return min_val
