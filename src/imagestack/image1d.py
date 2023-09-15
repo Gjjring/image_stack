@@ -64,7 +64,7 @@ class Image1D(ImageBase):
         complement_mask.constraint = complement_mask.constraint*0.95
         x = self.x
         complement_mask_array = complement_mask.generate_mask(x)
-        complement_masked_data = ma.array(self.data, copy=False)
+        complement_masked_data = ma.array(self.data, copy=True)
         complement_masked_data.mask = np.logical_or(complement_mask_array, self.mask.current)
         return complement_masked_data.mean()
 

@@ -182,7 +182,7 @@ class Image2D(ImageBase):
                 if self.mask.polar:
                     constraint = self.mask.constraint
                 else:
-                    constraint = self.mask.constraint[0]
+                    constraint = self.mask.constraint[1]
             else:
                 new_data = self.data.mean(axis=0)
             new_x = self.y
@@ -227,7 +227,7 @@ class Image2D(ImageBase):
             if use_masked:
                 new_data = self.masked_data[slice_index, :]
             else:
-                new_data = self.masked_data[slice_index, :]
+                new_data = self.data[slice_index, :]
             new_x = self.y
             new_y = np.array([position])
         elif dimension == 'y':
@@ -235,14 +235,26 @@ class Image2D(ImageBase):
             if use_masked:
                 new_data = self.masked_data[:, slice_index]
             else:
-                new_data = self.masked_data[:, slice_index]
+                new_data = self.data[:, slice_index]
             new_x = self.x
             new_y = np.array([position])
         else:
             raise ValueError("dimension must by either x or y", +
                              " ,value was: {}".format(dimension))
         #print("new_data.shape: {}".format(new_data.shape))
-        return Image1D(new_data, new_x, self.z)
+        image = Image1D(new_data, new_x, self.z)
+        if self.mask.shape =='circular':
+            mask_constraint = self.mask.constraint
+        elif self.mask.shape =='rectangular':
+            if dimension == 'x':
+                constraint = self.mask.constraint[1]
+            elif dimension == 'y':
+                constraint = self.mask_constraint[0]
+        else:
+            constraint = None
+        if constraint is not None:
+            image.set_mask("window", self.mask.region, constraint)
+        return image
 
 
 
