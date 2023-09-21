@@ -37,6 +37,7 @@ class Image1D(ImageBase):
         super().__init__(data)
         self.x = x
         self.z = z
+        self.basis_decomp = None
 
     def get_cart_dimensions(self):
         """
@@ -221,6 +222,16 @@ class Image1D(ImageBase):
         fit_output['fitted_image'] = Image1D(fitted_data, self.x, self.z)
         fit_output['fitted_image'].apply_mask(self.mask)
 
+    def get_basis_decomp(self, basis, modes):
+        if self.basis_decomp is None:
+            self.basis_decomp = BasisDecomposition1D(basis, modes, self.x, self.mask)
+        else:
+            if not basis == self.basis_decomp.basis:
+                self.basis_decomp = None
+                return self.get_basis_decomp(basis, modes)
+            self.basis_decomp.update_modes(modes)
+        return self.basis_decomp
+
     def fit_basis(self, basis, modes):
         """
         fit n modes of a basis to the masked image
@@ -238,9 +249,9 @@ class Image1D(ImageBase):
         if is_polar:
             raise ValueError("polar basis functions incompatible with 1D image")
 
-        bd = BasisDecomposition1D(basis, modes, self.x, self.mask)
+        bd = self.get_basis_decomp(basis, modes)
         fit_output = ImageBase.empty_fit_output(modes)
-        projected_coefficients = self._basis_projection(bd, fit_output)
+        self._basis_projection(bd, fit_output)
         self._optimize_projection(bd, fit_output)
         return fit_output
 
@@ -284,7 +295,11 @@ class ImageStack1D(ImageStackBase):
         super().__init__(data)
         self.x = x
         self.z = z
-        self.n_layers = z.size
+        #self.n_layers = z.size
+
+    @property
+    def n_layers(self):
+        return self.z.size
 
     def slice_z(self, z_index=None, z_value=None):
         sliced_data, sliced_z, is_sequence = self._slice_z(z_index=z_index, z_value=z_value)
@@ -395,14 +410,14 @@ class ImageStack1D(ImageStackBase):
         x_mid = int((x_length-1)/2)
         return self.masked_data[x_mid, :]
 
-    def projection(self, masked_1d_data):
-        n_unmasked = ma.count(masked_1d_data)
-        coefficients = np.zeros(self.n_layers)
-        for layer in range(self.n_layers):
-            basis_func = self.masked_data[..., layer]
-            coef = ma.sum(masked_1d_data*basis_func)/n_unmasked
-            coefficients[layer] = coef
-        return coefficients
+    # def projection(self, masked_1d_data):
+    #     n_unmasked = ma.count(masked_1d_data)
+    #     coefficients = np.zeros(self.n_layers)
+    #     for layer in range(self.n_layers):
+    #         basis_func = self.masked_data[..., layer]
+    #         coef = ma.sum(masked_1d_data*basis_func)/n_unmasked
+    #         coefficients[layer] = coef
+    #     return coefficients
 
     def average_edge_data(self):
         """
@@ -441,9 +456,11 @@ class BasisDecomposition1D(ImageStack1D):
         """
         self.basis = basis_func
         self.modes = modes
+        self.modes_mask = ma.asarray(self.modes)
         mask = Mask1D.from_mask(mask)
         x = BasisDecomposition1D.normalise_dimensions(x, mask)
         data = self.init_basis(x)
+        self.reset_projection_cache()
         if not isinstance(modes, np.ndarray):
             raise AttributeError("modes must by numpy.ndarray")
         super().__init__(data, x, modes.astype(float))
@@ -459,15 +476,76 @@ class BasisDecomposition1D(ImageStack1D):
     def init_basis(self, x):
         return ImageStack1D.from_basis(self.basis, self.modes, x).data
 
+    def update_modes(self, new_modes):
+        to_evaluate = []
+        for mode in new_modes:
+            if not np.any(np.isclose(mode, self.modes)):
+                to_evaluate.append(mode)
+        if len(to_evaluate) == 0:
+            condition = [x not in new_modes for x in self.modes]
+            self.modes_mask = ma.masked_where( condition, self.modes)
+            condition = [x not in new_modes for x in self.modes]
+            self.modes_mask = ma.masked_where( condition, self.modes)
+            self.z = self.modes_mask.compressed()
+            return
+
+        to_evaluate = np.array(to_evaluate)
+        new_data = ImageStack1D.from_basis(self.basis, to_evaluate, self.x).data
+
+        total_data = np.concatenate([self.data, new_data], axis=1)
+        total_modes = np.concatenate([self.modes, to_evaluate])
+        sort_indices = np.argsort(total_modes)
+        total_modes = total_modes[sort_indices]
+        total_data = total_data[:, sort_indices]
+        self.modes = total_modes
+        self.data = total_data
+        condition = [x not in new_modes for x in self.modes]
+        self.modes_mask = ma.masked_where( condition, self.modes)
+        self.z = self.modes_mask.compressed()
+        #print("modes size: {}".format(self.modes.size))
+
+    def reset_projection_cache(self):
+        self.projection_cache = {}
+
+    def projection(self, masked_1D_data):
+        n_unmasked = ma.count(masked_1D_data)
+        #print("n layers: {}".format(self.n_layers))
+        #print("masked vals: {}".format(self.modes_mask.count()))
+        coefficients = np.zeros(self.n_layers)
+        i_coef = 0
+        for ilayer, mode in enumerate(self.modes):
+            if ma.is_masked(self.modes_mask[ilayer]):
+                continue
+            if mode in self.projection_cache:
+                coef = self.projection_cache[mode]
+            else:
+                basis_func = self.masked_data[..., ilayer]
+                coef = ma.sum(masked_1D_data*basis_func)/n_unmasked
+                self.projection_cache[mode] = coef
+            coefficients[i_coef] = coef
+            i_coef += 1
+        #print("coefs size: {}".format(coefficients.size))
+        return coefficients
+
+
     def image_from_coefficients(self, coefficients):
-        stacked_image_data = (coefficients*self.masked_data)
+        all_coefs = np.zeros(self.modes.size)
+        all_coefs[~self.modes_mask.mask] = coefficients
+        stacked_image_data = (all_coefs*self.masked_data)
         image_data = stacked_image_data.sum(axis=1)
         return image_data
+
+
 
     def _fit_coefficients(self, image, start_vals):
         self.image_data = image
         minimize_func = lambda x : self.err_fun(x)
         jacob_fun = lambda x : self.err_fun_jac(x)
+
+        test_output = minimize_func(start_vals)
+
+        test_jacob = jacob_fun(start_vals)
+
         res = scipy.optimize.leastsq(minimize_func,
                                      x0=start_vals,
                                      Dfun = jacob_fun,
@@ -480,5 +558,11 @@ class BasisDecomposition1D(ImageStack1D):
         return diff.ravel()
 
     def err_fun_jac(self, x):
-        sliced_data = self.masked_data
+        #print("masked_data_shape: {}".format(self.masked_data.shape))
+        #print("modes_mask: {}".format(self.modes_mask))
+        #print("not masked: {}".format(~self.modes_mask.mask))
+        #print("mask shape: {}".format(self.modes_mask.mask.shape))
+        sliced_data = self.masked_data[:, ~self.modes_mask.mask]
+        sliced_data = sliced_data.reshape(self.x.size, self.modes_mask.count())
+        #print("sliced data shape: {}".format(sliced_data.shape))
         return sliced_data

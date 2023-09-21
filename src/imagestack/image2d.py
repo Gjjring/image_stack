@@ -48,6 +48,7 @@ class Image2D(ImageBase):
         self.x = x
         self.y = y
         self.z = z
+        self.basis_decomp = None
 
     @classmethod
     def from_image(image2d, other_image):
@@ -191,10 +192,11 @@ class Image2D(ImageBase):
         elif dimension == 'y':
             if use_masked:
                 new_data = self.masked_data.mean(axis=1)
-                if self.mask.polar:
+                print(self.mask.shape)
+                if self.mask.shape=='circular':
                     constraint = self.mask.constraint
                 else:
-                    constraint = self.mask.constraint[0]                
+                    constraint = self.mask.constraint[0]
             else:
                 new_data = self.data.mean(axis=1)
             new_x = self.x
@@ -244,7 +246,7 @@ class Image2D(ImageBase):
         #print("new_data.shape: {}".format(new_data.shape))
         image = Image1D(new_data, new_x, self.z)
         if self.mask.shape =='circular':
-            mask_constraint = self.mask.constraint
+            constraint = self.mask.constraint
         elif self.mask.shape =='rectangular':
             if dimension == 'x':
                 constraint = self.mask.constraint[1]
@@ -331,7 +333,9 @@ class Image2D(ImageBase):
             dict for holding fit information
         """
         projected_data = np.zeros_like(self.data)
+        #print("masked data shape: {}".format(self.masked_data.shape))
         projected_coefficients = basis_decomp.projection(self.masked_data)
+        #print("projected coefficients size: {}".format(projected_coefficients.size))
         fit_output['projected_coefficients'][...] = projected_coefficients
         projected_data[...] = basis_decomp.image_from_coefficients(projected_coefficients)
         fit_output['projected_image'] = Image2D(projected_data, self.x, self.y, self.z)
@@ -363,6 +367,21 @@ class Image2D(ImageBase):
         fit_output['fitted_image'] = Image2D(fitted_data, self.x, self.y, self.z)
         fit_output['fitted_image'].apply_mask(self.mask)
 
+    def get_basis_decomp(self, basis, modes):
+        if self.basis_decomp is None:
+            self.basis_decomp = BasisDecomposition2D(basis, modes, self.x, self.y, self.mask)
+        else:
+            if not basis == self.basis_decomp.basis:
+                self.basis_decomp = None
+                return self.get_basis_decomp(basis, modes)
+            #first_mode = self.basis_decomp.slice_z(z_value=self.basis_decomp.z[0])
+            #if not first_mode._check_image_compatible(self):
+            #    self.basis_decomp = None
+            #    return self.get_basis_decomp(basis, modes)
+            self.basis_decomp.update_modes(modes)
+        return self.basis_decomp
+
+
     def fit_basis(self, basis, modes):
         """
         fit modes of a basis to the masked image
@@ -377,7 +396,7 @@ class Image2D(ImageBase):
         is_polar = basis_functions.is_polar(basis)
         #mode_start = basis_functions.mode_start(basis)
         #modes = np.arange(mode_start, mode_start+n_modes, dtype=np.int64)
-        bd = BasisDecomposition2D(basis, modes, self.x, self.y, self.mask)
+        bd = self.get_basis_decomp(basis, modes)
         fit_output = Image2D.empty_fit_output(modes)
         projected_coefficients = self._basis_projection(bd, fit_output)
         self._optimize_projection(bd, fit_output)
@@ -427,6 +446,10 @@ class Image2D(ImageBase):
         return complement_masked_data.mean()
 
     def _check_image_compatible(self, other):
+        """
+        checks if two images can be compared pixelwise
+        """
+
         if not isinstance(self, type(other)):
             raise ValueError("cannot compare image of type {}".format(type(self)) +
                              " to image of type {}".format(type(other)))
@@ -479,7 +502,12 @@ class ImageStack2D(ImageStackBase):
         self.x = x
         self.y = y
         self.z = z
-        self.n_layers = z.size
+        #self.n_layers = z.size
+        self.basis_decomp = None
+
+    @property
+    def n_layers(self):
+        return self.z.size
 
     @classmethod
     def from_image_list(image_stack2D, images):
@@ -669,14 +697,6 @@ class ImageStack2D(ImageStackBase):
     #                              self.x*xy_scale)
     #     return flux
 
-    def projection(self, masked_2D_data):
-        n_unmasked = ma.count(masked_2D_data)
-        coefficients = np.zeros(self.n_layers)
-        for layer in range(self.n_layers):
-            basis_func = self.masked_data[..., layer]
-            coef = ma.sum(masked_2D_data*basis_func)/n_unmasked
-            coefficients[layer] = coef
-        return coefficients
 
     def average_over_dimension(self, dimension='y', use_masked=False):
         """
@@ -695,6 +715,7 @@ class ImageStack2D(ImageStackBase):
             im_1d = sliced_image.average_over_dimension(dimension=dimension,
                                                         use_masked=use_masked)
             images.append(im_1d)
+        print(len(images))
         return ImageStack1D.from_image_list(images)
 
     def slice_dimension(self, dimension='y', position=0., use_masked=False):
@@ -750,9 +771,11 @@ class BasisDecomposition2D(ImageStack2D):
         """
         self.basis = basis_func
         self.modes = modes
+        self.modes_mask = ma.asarray(self.modes)
         mask = Mask2D.from_mask(mask)
         x, y = BasisDecomposition2D.normalise_dimensions(x, y, mask)
         data = self.init_basis(x, y)
+        self.reset_projection_cache()
         if not isinstance(modes, np.ndarray):
             raise AttributeError("modes must by numpy.ndarray")
         super().__init__(data, x, y, modes.astype(float))
@@ -773,8 +796,69 @@ class BasisDecomposition2D(ImageStack2D):
     def init_basis(self, x, y):
         return ImageStack2D.from_basis(self.basis, self.modes, x, y).data
 
+    def update_modes(self, new_modes):
+        #print("updating modes from {} to {}".format(self.modes.size, new_modes.size))
+        #if (new_modes.size == self.modes.size and
+        #    np.all(np.isclose(new_modes, self.modes))):
+        #    print("modes same size")
+        #    return
+
+        to_evaluate = []
+        for mode in new_modes:
+            if not np.any(np.isclose(mode, self.modes)):
+                to_evaluate.append(mode)
+        if len(to_evaluate) == 0:
+            condition = [x not in new_modes for x in self.modes]
+            self.modes_mask = ma.masked_where( condition, self.modes)
+            #print("all new modes not masked")
+            condition = [x not in new_modes for x in self.modes]
+            self.modes_mask = ma.masked_where( condition, self.modes)
+            self.z = self.modes_mask.compressed()
+            #print("modes size: {}".format(self.modes.size))
+            return
+
+        to_evaluate = np.array(to_evaluate)
+        new_data = ImageStack2D.from_basis(self.basis, to_evaluate, self.x, self.y).data
+
+        total_data = np.concatenate([self.data, new_data], axis=2)
+        total_modes = np.concatenate([self.modes, to_evaluate])
+        sort_indices = np.argsort(total_modes)
+        total_modes = total_modes[sort_indices]
+        total_data = total_data[:, :, sort_indices]
+        self.modes = total_modes
+        self.data = total_data
+        condition = [x not in new_modes for x in self.modes]
+        self.modes_mask = ma.masked_where( condition, self.modes)
+        self.z = self.modes_mask.compressed()
+        #print("modes size: {}".format(self.modes.size))
+
+    def reset_projection_cache(self):
+        self.projection_cache = {}
+
+    def projection(self, masked_2D_data):
+        n_unmasked = ma.count(masked_2D_data)
+        #print("n layers: {}".format(self.n_layers))
+        #print("masked vals: {}".format(self.modes_mask.count()))
+        coefficients = np.zeros(self.n_layers)
+        i_coef = 0
+        for ilayer, mode in enumerate(self.modes):
+            if ma.is_masked(self.modes_mask[ilayer]):
+                continue
+            if mode in self.projection_cache:
+                coef = self.projection_cache[mode]
+            else:
+                basis_func = self.masked_data[..., ilayer]
+                coef = ma.sum(masked_2D_data*basis_func)/n_unmasked
+                self.projection_cache[mode] = coef
+            coefficients[i_coef] = coef
+            i_coef += 1
+        #print("coefs size: {}".format(coefficients.size))
+        return coefficients
+
     def image_from_coefficients(self, coefficients):
-        stacked_image_data = (coefficients*self.masked_data)
+        all_coefs = np.zeros(self.modes.size)
+        all_coefs[~self.modes_mask.mask] = coefficients
+        stacked_image_data = (all_coefs*self.masked_data)
         image_data = stacked_image_data.sum(axis=2)
         return image_data
 
@@ -786,7 +870,7 @@ class BasisDecomposition2D(ImageStack2D):
                                      x0=start_vals,
                                      Dfun = jacob_fun,
                                      full_output=True)
-        
+
         return res
 
     def err_fun(self, x):
@@ -796,7 +880,11 @@ class BasisDecomposition2D(ImageStack2D):
         return diff.ravel()
 
     def err_fun_jac(self, x):
-        sliced_data = self.masked_data
+        sliced_data = self.masked_data[:, :, ~self.modes_mask.mask]
         X = self.get_cart_dimensions()[0]
         #print("jacobian output: {}".format(np.amax(sliced_data.flatten())) )
-        return sliced_data.reshape(X.size, self.modes.size)
+        return sliced_data.reshape(X.size, self.modes_mask.count())
+
+    #def _check_image_compatible(self, other):
+    #    print(super())
+    #    ImageStack2D._check_image_compatible(super(), other)

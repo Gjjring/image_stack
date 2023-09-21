@@ -12,6 +12,13 @@ from imagestack import basis_functions
 from imagestack.focal import FocalPlane
 from imagestack.statistics import (InformationCriteria, information_criterion,
                                     residuals)
+
+def _get_modes_from_basis(basis, n_modes):
+    n_modes = int(n_modes)
+    mode_start = basis_functions.mode_start(basis)
+    return np.arange(mode_start, mode_start+n_modes, dtype=np.int64)
+
+
 class ImageBase(ABC):
 
     """
@@ -108,7 +115,7 @@ class ImageBase(ABC):
         """
         normalise the data such that the data lie between 0. and 1.
         """
-        
+
         if edge_min:
             min_val = self.average_edge_data()
         else:
@@ -117,7 +124,7 @@ class ImageBase(ABC):
             max_val = self.average_edge_data()
         else:
             max_val = np.amax(self.masked_data)
-            
+
         if np.isclose(np.abs(max_val-min_val), 0.):
             raise ValueError("cannot normalise range with equal maximum and" +
                              " minimum value")
@@ -303,9 +310,7 @@ class ImageBase(ABC):
         criterion: InformationCriteria Enum
             the information criteria to be minimized
         """
-        n_modes = int(n_modes)
-        mode_start = basis_functions.mode_start(basis)
-        modes = np.arange(mode_start, mode_start+n_modes, dtype=np.int64)
+        modes = _get_modes_from_basis(basis, n_modes)
         fit_output = self.fit_basis(basis, modes)
         residual = fit_output['squared_residuals']
         n_data_points = ma.count(self.masked_data)
@@ -354,15 +359,18 @@ class ImageBase(ABC):
         else:
             coarse_range = np.linspace(min_n_modes, max_n_modes, 5, dtype=np.int64)
             obj_values = np.zeros(coarse_range.size)
+            #print("coarse range: {}".format(coarse_range))
             for ii, n_modes in enumerate(coarse_range):
                 obj_values[ii] = obj_fun(n_modes)
+                #print("obj value {}: {}".format(n_modes, obj_values[ii]))
+            #print("obj_values: {}".format(obj_values))
             fine_range = np.arange(min_n_modes, max_n_modes+1, dtype=np.int64)
             interp = scipy.interpolate.interp1d(coarse_range, obj_values, kind='cubic')
             fine_values = interp(fine_range)
             min_index = np.where(np.isclose(fine_values,
                                             np.amin(fine_values)))
             max_n_modes_required = fine_range[min_index[0][0]]
-            
+
         return max_n_modes_required
 
 
@@ -430,6 +438,8 @@ class ImageStackBase(ABC):
         mask = self.mask.generate_mask(self.get_cart_dimensions())
         self.apply_mask()
 
+
+
     def apply_mask(self, mask=None):
         if mask is not None:
             self.mask = copy_mask(mask)
@@ -478,8 +488,8 @@ class ImageStackBase(ABC):
                     max_val = image.average_edge_data()
                 else:
                     max_val = np.max(image.masked_data)
-                    
-                    
+
+
                 if np.isclose(np.abs(max_val-min_val), 0.):
                     raise ValueError("cannot normalise range with equal maximum and" +
                                      " minimum value")
@@ -493,7 +503,7 @@ class ImageStackBase(ABC):
             if edge_max:
                 max_val = np.amin(self.average_edge_data())
             else:
-                max_val = np.max(self.masked_data)                
+                max_val = np.max(self.masked_data)
             self.data = (self.data-min_val)/(max_val-min_val)
 
     def normalise_highest(self):
@@ -676,6 +686,12 @@ class ImageStackBase(ABC):
         all_required_modes = np.zeros(self.n_layers, dtype=np.int64)
         for layer in range(self.n_layers):
             image = self.slice_z(layer)
+            if layer == 0:
+                modes = _get_modes_from_basis(basis, min_n_modes)
+                bd = image.get_basis_decomp(basis, modes)
+            else:
+                bd.reset_projection_cache()
+                image.basis_decomp = bd
             required_n_modes = image.optimise_basis_size(basis, max_n_modes,
                                                          min_n_modes=min_n_modes,
                                                          criterion=criterion,
@@ -712,8 +728,17 @@ class ImageStackBase(ABC):
         if not len(modes) == self.z.size:
             raise ValueError("n_modes must have same length as layers in stack")
         all_fit_outputs = []
+        max_n_modes = 0
+        for layer_modes in modes:
+            max_n_modes = np.max([max_n_modes, np.amax(layer_modes)])
         for layer in range(self.n_layers):
-            fit_output = self.slice_z(z_index=layer).fit_basis(basis, modes[layer])
+            image = self.slice_z(z_index=layer)
+            if layer == 0:
+                bd = image.get_basis_decomp(basis, modes[layer])
+                image.basis_decomp = bd
+            else:
+                image.basis_decomp = bd
+            fit_output = image.fit_basis(basis, modes[layer])
             all_fit_outputs.append(fit_output)
         return all_fit_outputs
 
