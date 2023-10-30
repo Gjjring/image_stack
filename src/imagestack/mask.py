@@ -80,12 +80,12 @@ class Mask2D():
             region = get_complement(other.region)
         else:
             region = other.region
-        new_mask = Mask2D(other.shape, region, np.array(other.constraint))
+        new_mask = Mask2D(other.shape, region, np.array(other.constraint), origin=np.array(other.origin))
         new_mask.polar = other.polar
         return new_mask
 
     def __repr__(self):
-        return "Mask2D({},{},{})".format(self.shape, self.region, self.constraint)
+        return "Mask2D({},{},{},{})".format(self.shape, self.region, self.constraint, self.origin)
 
     def generate_mask(self, XY):
         """

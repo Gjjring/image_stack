@@ -501,7 +501,7 @@ class ImageStackBase(ABC):
             else:
                 min_val = np.min(self.masked_data)
             if edge_max:
-                max_val = np.amin(self.average_edge_data())
+                max_val = np.amax(self.average_edge_data())
             else:
                 max_val = np.max(self.masked_data)
             self.data = (self.data-min_val)/(max_val-min_val)

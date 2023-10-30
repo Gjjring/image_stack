@@ -188,7 +188,7 @@ class Image2D(ImageBase):
                 new_data = self.data.mean(axis=0)
             new_x = self.y
             new_y = np.array([0.])
-            origin = self.mask.origin[0]
+            origin = self.mask.origin[1]
         elif dimension == 'y':
             if use_masked:
                 new_data = self.masked_data.mean(axis=1)
@@ -201,7 +201,7 @@ class Image2D(ImageBase):
                 new_data = self.data.mean(axis=1)
             new_x = self.x
             new_y = np.array([0.])
-            origin = self.mask.origin[1]
+            origin = self.mask.origin[0]
         else:
             raise ValueError("dimension must by either x or y", +
                              " ,value was: {}".format(dimension))
@@ -438,7 +438,7 @@ class Image2D(ImageBase):
 
     def average_edge_data(self):
         complement_mask = Mask2D.from_mask(self.mask, complement=True)
-        complement_mask.constraint = complement_mask.constraint*0.95
+        complement_mask.constraint = complement_mask.constraint*0.90
         XY = self.get_cart_dimensions()
         complement_mask_array = complement_mask.generate_mask(XY)
         complement_masked_data = ma.array(self.data, copy=False)
@@ -661,7 +661,8 @@ class ImageStack2D(ImageStackBase):
             np.savez(fpath, x=self.x, y=self.y, z=self.z,
                      data=self.data, mask_shape=self.mask.shape,
                      mask_region=self.mask.region,
-                     mask_constraint=self.mask.constraint)
+                     mask_constraint=self.mask.constraint,
+                     mask_origin=self.mask.origin)
         else:
             np.savez(fpath, x=self.x, y=self.y, z=self.z,
                      data=self.data)
