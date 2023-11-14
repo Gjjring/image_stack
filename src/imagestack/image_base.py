@@ -65,6 +65,31 @@ class ImageBase(ABC):
         self.mask = mask_from_data(data)
         self.label=""
 
+    def _set_mask_from_file_data(self, file_data):
+        required = ['mask_shape', 'mask_constraint']
+        if any( x in file_data for x in required):
+            if not all(x in file_data for x in required):
+                raise KeyError("incomplete mask data in file_data")
+
+        optional = ['mask_region', 'mask_region_constraint',
+                    'mask_tolerance', 'mask_complement']
+        kwargs = {}
+        for key, val in file_data.items():
+            if key not in required and key in optional:
+                reduced_key = key[5:]
+                if reduced_key == 'region' or reduced_key == 'region_constraint':
+                    kwargs[reduced_key] = str(val)
+                elif reduced_key == 'complement':
+                    kwargs[reduced_key] = bool(val)
+                elif reduced_key == 'tolerance':
+                    kwargs[reduced_key] = val
+                else:
+                    kwargs[reduced_key] = np.array(val)
+        self.set_mask(str(file_data['mask_shape']),
+                      file_data['mask_constraint'],
+                      **kwargs)
+
+
     @property
     def data(self):
         return self._data
@@ -81,13 +106,16 @@ class ImageBase(ABC):
         noise = np.random.normal(0, noise_level, self.data.size).reshape(self.data.shape)
         self.data += noise
 
-    def set_mask(self, shape, region, constraint, origin=None):
+    def set_mask(self, shape, constraint, region='all', origin=None,
+                 region_constraint=0., complement=False, tolerance=1e-3):
         self.mask.shape = shape
         self.mask.region = region
         self.mask.constraint = constraint
         if origin is not None:
             self.mask.origin = origin
-        #mask = self.mask.generate_mask(self.get_cart_dimensions())
+        self.mask.region_constraint = region_constraint
+        self.mask.complement= complement
+        self.mask.tolerance = tolerance
         self.apply_mask()
 
     def apply_mask(self, mask=None):
@@ -355,6 +383,7 @@ class ImageBase(ABC):
             #                            options={'maxiter':100,
             #                                     'xatol':0.5,
             #                                     'disp':True})
+            #print(res)
             max_n_modes_required = int(res['x'])
         else:
             coarse_range = np.linspace(min_n_modes, max_n_modes, 5, dtype=np.int64)
@@ -423,21 +452,48 @@ class ImageStackBase(ABC):
         self.focal_plane = None
         self.label= ""
 
+    def _set_mask_from_file_data(self, file_data):
+        required = ['mask_shape', 'mask_constraint']
+        if any( x in file_data for x in required):
+            if not all(x in file_data for x in required):
+                raise KeyError("incomplete mask data in file_data")
+
+        optional = ['mask_region', 'mask_region_constraint',
+                    'mask_tolerance', 'mask_complement',
+                    'mask_origin']
+        kwargs = {}
+        for key, val in file_data.items():
+            if key not in required and key in optional:
+                reduced_key = key[5:]
+                if reduced_key == 'region':
+                    kwargs[reduced_key] = str(val)
+                elif reduced_key == 'complement':
+                    kwargs[reduced_key] = bool(val)
+                elif reduced_key == 'tolerance':
+                    kwargs[reduced_key] = val
+                else:
+                    kwargs[reduced_key] = val
+        self.set_mask(str(file_data['mask_shape']),
+                      file_data['mask_constraint'],
+                      **kwargs)
+
     def add_noise(self, noise_level, seed=None):
         if seed is not None:
             np.random.seed(seed)
         noise = np.random.normal(0, noise_level, self.data.size).reshape(self.data.shape)
         self.data += noise
 
-    def set_mask(self, shape, region, constraint, origin=None):
+    def set_mask(self, shape, constraint, region='all', origin=None,
+                 region_constraint=0., complement=False, tolerance=1e-3):
         self.mask.shape = shape
         self.mask.region = region
         self.mask.constraint = constraint
+        self.mask.region_constraint = region_constraint
+        self.mask.complement= complement
+        self.mask.tolerance = tolerance
         if origin is not None:
             self.mask.origin = origin
-        mask = self.mask.generate_mask(self.get_cart_dimensions())
         self.apply_mask()
-
 
 
     def apply_mask(self, mask=None):
@@ -529,6 +585,7 @@ class ImageStackBase(ABC):
         other: subclass of ImageBase
             a different image object instance to compare to
         """
+
         self._check_stack_compatible(other)
         return residuals(self.masked_data.compressed(), other.masked_data.compressed())
 
@@ -728,9 +785,9 @@ class ImageStackBase(ABC):
         if not len(modes) == self.z.size:
             raise ValueError("n_modes must have same length as layers in stack")
         all_fit_outputs = []
-        max_n_modes = 0
-        for layer_modes in modes:
-            max_n_modes = np.max([max_n_modes, np.amax(layer_modes)])
+        #max_n_modes = 0
+        #for layer_modes in modes:
+        #    max_n_modes = np.max([max_n_modes, np.amax(layer_modes)])
         for layer in range(self.n_layers):
             image = self.slice_z(z_index=layer)
             if layer == 0:
@@ -738,6 +795,7 @@ class ImageStackBase(ABC):
                 image.basis_decomp = bd
             else:
                 image.basis_decomp = bd
+                image.basis_decomp.reset_projection_cache()
             fit_output = image.fit_basis(basis, modes[layer])
             all_fit_outputs.append(fit_output)
         return all_fit_outputs

@@ -133,15 +133,7 @@ class Image2D(ImageBase):
 
             img_stack = image2D(file_data['data'], file_data['x'],
                                       file_data['y'], file_data['z'])
-            if 'mask_shape' in file_data:
-                if 'mask_origin' in file_data:
-                    origin = file_data['mask_origin']
-                else:
-                    origin = None
-                img_stack.set_mask(file_data['mask_shape'],
-                                   file_data['mask_region'],
-                                   file_data['mask_constraint'],
-                                   origin=origin)
+            img_stack.set_mask_from_file_data(file_data)
         return img_stack
 
 
@@ -150,7 +142,11 @@ class Image2D(ImageBase):
             np.savez(fpath, x=self.x, y=self.y, z=self.z,
                      data=self.data, mask_shape=self.mask.shape,
                      mask_region=self.mask.region,
-                     mask_constraint=self.mask.constraint)
+                     mask_constraint=self.mask.constraint,
+                     mask_origin=self.mask.origin,
+                     mask_region_constraint=self.mask.region_constraint,
+                     mask_complement=self.mask.complement,
+                     mask_tolerance=self.mask.tolerance)
         else:
             np.savez(fpath, x=self.x, y=self.y, z=self.z,
                      data=self.data)
@@ -192,7 +188,6 @@ class Image2D(ImageBase):
         elif dimension == 'y':
             if use_masked:
                 new_data = self.masked_data.mean(axis=1)
-                print(self.mask.shape)
                 if self.mask.shape=='circular':
                     constraint = self.mask.constraint
                 else:
@@ -208,7 +203,8 @@ class Image2D(ImageBase):
         #print("new_data.shape: {}".format(new_data.shape))
         image1d = Image1D(new_data, new_x, self.z)
         if use_masked:
-            image1d.set_mask("window", self.mask.region, constraint, origin=origin)
+            mask_1d = self.mask.convert_to_1D(dimension=dimension)
+            image1d.apply_mask(mask_1d)
         return image1d
 
     def slice_dimension(self, dimension='y', position=0., use_masked=False):
@@ -255,7 +251,9 @@ class Image2D(ImageBase):
         else:
             constraint = None
         if constraint is not None:
-            image.set_mask("window", self.mask.region, constraint)
+            mask_1d = self.mask.convert_to_1D(dimension=dimension)
+            image1d.apply_mask(mask_1d)
+            #image.set_mask("window", self.mask.region, constraint)
         return image
 
 
@@ -437,7 +435,7 @@ class Image2D(ImageBase):
         self.data = self.data-gaussian_model.data
 
     def average_edge_data(self):
-        complement_mask = Mask2D.from_mask(self.mask, complement=True)
+        complement_mask = Mask2D.from_mask(self.mask)
         complement_mask.constraint = complement_mask.constraint*0.90
         XY = self.get_cart_dimensions()
         complement_mask_array = complement_mask.generate_mask(XY)
@@ -643,15 +641,7 @@ class ImageStack2D(ImageStackBase):
                                    " is missing from npz file")
             img_stack = image_stack2D(file_data['data'], file_data['x'],
                                       file_data['y'], file_data['z'])
-            if 'mask_shape' in file_data:
-                if 'mask_origin' in file_data:
-                    origin = file_data['mask_origin']
-                else:
-                    origin = None
-                img_stack.set_mask(file_data['mask_shape'],
-                                   file_data['mask_region'],
-                                   file_data['mask_constraint'],
-                                   origin=origin)
+            img_stack._set_mask_from_file_data(file_data)
         return img_stack
 
 
@@ -662,7 +652,10 @@ class ImageStack2D(ImageStackBase):
                      data=self.data, mask_shape=self.mask.shape,
                      mask_region=self.mask.region,
                      mask_constraint=self.mask.constraint,
-                     mask_origin=self.mask.origin)
+                     mask_origin=self.mask.origin,
+                     mask_region_constraint=self.mask.region_constraint,
+                     mask_complement=self.mask.complement,
+                     mask_tolerance=self.mask.tolerance)
         else:
             np.savez(fpath, x=self.x, y=self.y, z=self.z,
                      data=self.data)
@@ -716,7 +709,6 @@ class ImageStack2D(ImageStackBase):
             im_1d = sliced_image.average_over_dimension(dimension=dimension,
                                                         use_masked=use_masked)
             images.append(im_1d)
-        print(len(images))
         return ImageStack1D.from_image_list(images)
 
     def slice_dimension(self, dimension='y', position=0., use_masked=False):

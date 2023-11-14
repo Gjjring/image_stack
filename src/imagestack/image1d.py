@@ -61,7 +61,7 @@ class Image1D(ImageBase):
         return (min_x, max_x)
 
     def average_edge_data(self):
-        complement_mask = Mask1D.from_mask(self.mask, complement=True)
+        complement_mask = Mask1D.from_mask(self.mask)
         complement_mask.constraint = complement_mask.constraint*0.95
         x = self.x
         complement_mask_array = complement_mask.generate_mask(x)
@@ -100,24 +100,30 @@ class Image1D(ImageBase):
                                    " is missing from npz file")
             img_stack = image1D(file_data['data'], file_data['x'],
                                       file_data['z'])
-            if 'mask_shape' in file_data:
-                if 'mask_origin' in file_data:
-                    origin = file_data['mask_origin']
-                else:
-                    origin = None
-                img_stack.set_mask(file_data['mask_shape'],
-                                   file_data['mask_region'],
-                                   file_data['mask_constraint'],
-                                   origin=origin)
+            img_stack._set_mask_from_file_data(file_data)
         return img_stack
 
+    def crop_to_mask(self):
+        if self.mask is None:
+            raise RuntimeError("cannot crop to mask if mask is None")
+
+        if self.mask.current is None:
+            raise RuntimeError("cannot crop to mask if mask.current is None")
+
+        x_cropped = self.x[np.logical_not(self.mask.current)]
+        data_cropped = self.masked_data.compressed()
+        return Image1D(data_cropped, x_cropped, self.z)
 
     def to_file(self, fpath):
         if self.mask.current is not None:
             np.savez(fpath, x=self.x, z=self.z,
                      data=self.data, mask_shape=self.mask.shape,
                      mask_region=self.mask.region,
-                     mask_constraint=self.mask.constraint)
+                     mask_constraint=self.mask.constraint,
+                     mask_origin=self.mask.origin,
+                     mask_region_constraint=self.mask.region_constraint,
+                     mask_complement=self.mask.complement,
+                     mask_tolerance=self.mask.tolerance)
         else:
             np.savez(fpath, x=self.x, z=self.z,
                      data=self.data)
@@ -212,6 +218,7 @@ class Image1D(ImageBase):
         res = basis_decomp._fit_coefficients(self.masked_data,
                                             fit_output['projected_coefficients'])
         fit_output['fitted_coefficients'][...] = res[0]
+
         std_floor = 1e-8
         if res[1] is not None:
             diag_vals = np.squeeze(np.array([np.diag(res[1])]))
@@ -383,15 +390,7 @@ class ImageStack1D(ImageStackBase):
                                    " is missing from npz file")
             img_stack = image_stack1D(file_data['data'], file_data['x'],
                                       file_data['z'])
-            if 'mask_shape' in file_data:
-                if 'mask_origin' in file_data:
-                    origin = file_data['mask_origin']
-                else:
-                    origin = None
-                img_stack.set_mask(file_data['mask_shape'],
-                                   file_data['mask_region'],
-                                   file_data['mask_constraint'],
-                                   origin=origin)
+            img_stack._set_mask_from_file_data(file_data)
         return img_stack
 
 
@@ -400,7 +399,11 @@ class ImageStack1D(ImageStackBase):
             np.savez(fpath, x=self.x, z=self.z,
                      data=self.data, mask_shape=self.mask.shape,
                      mask_region=self.mask.region,
-                     mask_constraint=self.mask.constraint)
+                     mask_constraint=self.mask.constraint,
+                     mask_origin=self.mask.origin,
+                     mask_region_constraint=self.mask.region_constraint,
+                     mask_complement=self.mask.complement,
+                     mask_tolerance=self.mask.tolerance)
         else:
             np.savez(fpath, x=self.x, z=self.z,
                      data=self.data)
@@ -409,6 +412,22 @@ class ImageStack1D(ImageStackBase):
         x_length = self.x.size
         x_mid = int((x_length-1)/2)
         return self.masked_data[x_mid, :]
+
+    def crop_to_mask(self):
+        if self.mask is None:
+            raise RuntimeError("cannot crop to mask if mask is None")
+
+        if self.mask.current is None:
+            raise RuntimeError("cannot crop to mask if mask.current is None")
+
+        cropped_images = []
+        for layer in range(self.n_layers):
+            image = self.slice_z(z_index=layer)
+            cropped_images.append(image.crop_to_mask())
+        new_image_stack = ImageStack1D.from_image_list(cropped_images)
+        return new_image_stack
+
+
 
     # def projection(self, masked_1d_data):
     #     n_unmasked = ma.count(masked_1d_data)
@@ -469,8 +488,9 @@ class BasisDecomposition1D(ImageStack1D):
 
     @staticmethod
     def normalise_dimensions(x, mask):
-        normed_x =  x/mask.constraint
+        normed_x =  (x-mask.origin)/mask.constraint
         mask.constraint = 1.0
+        mask.origin = 0.
         return normed_x
 
     def init_basis(self, x):
@@ -511,6 +531,7 @@ class BasisDecomposition1D(ImageStack1D):
         n_unmasked = ma.count(masked_1D_data)
         #print("n layers: {}".format(self.n_layers))
         #print("masked vals: {}".format(self.modes_mask.count()))
+        #print("n_unmasked: {}".format(n_unmasked))
         coefficients = np.zeros(self.n_layers)
         i_coef = 0
         for ilayer, mode in enumerate(self.modes):
@@ -521,6 +542,7 @@ class BasisDecomposition1D(ImageStack1D):
             else:
                 basis_func = self.masked_data[..., ilayer]
                 coef = ma.sum(masked_1D_data*basis_func)/n_unmasked
+                #print(ilayer, mode, coef)
                 self.projection_cache[mode] = coef
             coefficients[i_coef] = coef
             i_coef += 1
@@ -545,7 +567,6 @@ class BasisDecomposition1D(ImageStack1D):
         test_output = minimize_func(start_vals)
 
         test_jacob = jacob_fun(start_vals)
-
         res = scipy.optimize.leastsq(minimize_func,
                                      x0=start_vals,
                                      Dfun = jacob_fun,
@@ -562,7 +583,9 @@ class BasisDecomposition1D(ImageStack1D):
         #print("modes_mask: {}".format(self.modes_mask))
         #print("not masked: {}".format(~self.modes_mask.mask))
         #print("mask shape: {}".format(self.modes_mask.mask.shape))
+        #print(self.masked_data.compressed())
         sliced_data = self.masked_data[:, ~self.modes_mask.mask]
         sliced_data = sliced_data.reshape(self.x.size, self.modes_mask.count())
         #print("sliced data shape: {}".format(sliced_data.shape))
+        sliced_data[ self.mask.current, :] = 0.
         return sliced_data
