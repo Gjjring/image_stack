@@ -45,6 +45,8 @@ def mask_regions_for_shape(shape):
                                     'horizontal', 'vertical',
                                     'north', 'south', 'east', 'west']
     mask_regions[None] = [None]
+    if shape == 'None':
+        shape = None
     if shape not in mask_regions:
         raise KeyError("Unknown mask shape: [{}]".format(shape))
     return mask_regions[shape]
@@ -86,7 +88,7 @@ class Mask2D():
                  origin: np.ndarray=np.array([0., 0.]),
                  complement: bool=False,
                  region_constraint: float=0.,
-                 tolerance: float=1e-3) -> 'Mask2D':
+                 tolerance: float=1e-6) -> 'Mask2D':
         """
         Parameters
         ----------
@@ -103,10 +105,14 @@ class Mask2D():
         region_constraint: float
             width of mask for certain regions
         """
-        if shape not in ['circular', 'rectangular', None]:
+        if shape not in ['circular', 'rectangular', 'None', None]:
             raise ValueError("unknown shape for 2D mask: [{}]".format(shape))
+        if shape == 'None':
+            shape = None
         self.shape = shape
         regions = mask_regions_for_shape(shape)
+        if region == 'None':
+            region = None
         if not region in regions:
             raise ValueError("unknown region for {} mask: [{}]".format(shape, region))
         self.region = region
@@ -145,7 +151,7 @@ class Mask2D():
         elif self.shape == 'rectangular':
             mask = self._get_rectangular_mask(X, Y)
             self.polar = False
-        elif self.shape == None:
+        elif self.shape is None or self.shape == 'None':
             mask = self._get_null_mask(X, Y)
             self.polar = False
         else:
@@ -277,7 +283,7 @@ class Mask1D():
     def __init__(self, shape: str, constraint: float, region: str='all',
                  origin: float=0., complement: bool=False,
                  region_constraint: float=0.,
-                 tolerance: float=1e-3) -> 'Mask1D':
+                 tolerance: float=1e-6) -> 'Mask1D':
         """
         Parameters
         ----------
@@ -294,10 +300,14 @@ class Mask1D():
         region_constraint: float
             width of mask for certain regions
         """
-        if shape not in ['window', None]:
+        if shape not in ['window', 'None', None]:
             raise ValueError("unknown shape for 1D mask: [{}]".format(shape))
+        if shape == 'None':
+            shape = None
         self.shape = shape
         regions = mask_regions_for_shape(shape)
+        if region == 'None':
+            region = None
         if region not in regions:
             raise ValueError("unknown region for {} mask: [{}]".format(shape, region))
         self.region = region
@@ -331,7 +341,7 @@ class Mask1D():
         """
         if self.shape == 'window':
             mask = self._get_window_mask(x)
-        elif self.shape == None:
+        elif self.shape is None or self.shape == 'None':
             mask = self._get_null_mask(x)
         else:
             raise ValueError("unknown mask type for 1D mask :[{}]".format(self.shape))

@@ -610,6 +610,26 @@ class ImageStack2D(ImageStackBase):
         PHI = np.arctan2(Y, X)
         return R, PHI
 
+    def xlim(self):
+        X, Y = self.get_cart_dimensions()
+        if self.mask.current is not None:
+            x = np.unique(X[np.logical_not(self.mask.current)])
+        else:
+            x = np.unique(X)
+        min_x = np.min(x)
+        max_x = np.max(x)
+        return (min_x, max_x)
+
+    def ylim(self):
+        X, Y = self.get_cart_dimensions()
+        if self.mask.current is not None:
+            y = np.unique(Y[np.logical_not(self.mask.current)])
+        else:
+            y = np.unique(Y)
+        min_y = np.min(y)
+        max_y = np.max(y)
+        return (min_y, max_y)
+
     def remove_gaussian(self):
         """
         fit and remove a gaussian from the data.

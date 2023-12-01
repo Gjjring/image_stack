@@ -67,12 +67,16 @@ class ImageBase(ABC):
 
     def _set_mask_from_file_data(self, file_data):
         required = ['mask_shape', 'mask_constraint']
-        if any( x in file_data for x in required):
+        optional = ['mask_region', 'mask_region_constraint',
+                    'mask_tolerance', 'mask_complement',
+                    'mask_origin']
+        all_mask_keys = required + optional
+        if any( x in file_data for x in all_mask_keys):
             if not all(x in file_data for x in required):
                 raise KeyError("incomplete mask data in file_data")
+        else:
+            return
 
-        optional = ['mask_region', 'mask_region_constraint',
-                    'mask_tolerance', 'mask_complement']
         kwargs = {}
         for key, val in file_data.items():
             if key not in required and key in optional:
@@ -107,7 +111,7 @@ class ImageBase(ABC):
         self.data += noise
 
     def set_mask(self, shape, constraint, region='all', origin=None,
-                 region_constraint=0., complement=False, tolerance=1e-3):
+                 region_constraint=0., complement=False, tolerance=None):
         self.mask.shape = shape
         self.mask.region = region
         self.mask.constraint = constraint
@@ -115,7 +119,8 @@ class ImageBase(ABC):
             self.mask.origin = origin
         self.mask.region_constraint = region_constraint
         self.mask.complement= complement
-        self.mask.tolerance = tolerance
+        if tolerance is not None:
+            self.mask.tolerance = tolerance
         self.apply_mask()
 
     def apply_mask(self, mask=None):
@@ -454,13 +459,16 @@ class ImageStackBase(ABC):
 
     def _set_mask_from_file_data(self, file_data):
         required = ['mask_shape', 'mask_constraint']
-        if any( x in file_data for x in required):
-            if not all(x in file_data for x in required):
-                raise KeyError("incomplete mask data in file_data")
-
         optional = ['mask_region', 'mask_region_constraint',
                     'mask_tolerance', 'mask_complement',
                     'mask_origin']
+        all_mask_keys = required + optional
+        if any( x in file_data for x in all_mask_keys):
+            if not all(x in file_data for x in required):
+                raise KeyError("incomplete mask data in file_data")
+        else:
+            return
+
         kwargs = {}
         for key, val in file_data.items():
             if key not in required and key in optional:
@@ -473,6 +481,7 @@ class ImageStackBase(ABC):
                     kwargs[reduced_key] = val
                 else:
                     kwargs[reduced_key] = val
+        print(kwargs)
         self.set_mask(str(file_data['mask_shape']),
                       file_data['mask_constraint'],
                       **kwargs)
@@ -484,13 +493,14 @@ class ImageStackBase(ABC):
         self.data += noise
 
     def set_mask(self, shape, constraint, region='all', origin=None,
-                 region_constraint=0., complement=False, tolerance=1e-3):
+                 region_constraint=0., complement=False, tolerance=None):
         self.mask.shape = shape
         self.mask.region = region
         self.mask.constraint = constraint
         self.mask.region_constraint = region_constraint
         self.mask.complement= complement
-        self.mask.tolerance = tolerance
+        if tolerance is not None:
+            self.mask.tolerance = tolerance
         if origin is not None:
             self.mask.origin = origin
         self.apply_mask()
