@@ -252,7 +252,7 @@ class Image2D(ImageBase):
             constraint = None
         if constraint is not None:
             mask_1d = self.mask.convert_to_1D(dimension=dimension)
-            image1d.apply_mask(mask_1d)
+            image.apply_mask(mask_1d)
             #image.set_mask("window", self.mask.region, constraint)
         return image
 
