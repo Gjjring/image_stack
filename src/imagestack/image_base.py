@@ -481,7 +481,6 @@ class ImageStackBase(ABC):
                     kwargs[reduced_key] = val
                 else:
                     kwargs[reduced_key] = val
-        print(kwargs)
         self.set_mask(str(file_data['mask_shape']),
                       file_data['mask_constraint'],
                       **kwargs)
@@ -778,7 +777,6 @@ class ImageStackBase(ABC):
         fit_window_width = focal_fitter.optimize_fit_window()
         focus_estimate = focal_fitter.fit(fit_window=fit_window_width,
                                           fit_center=focal_fitter.current_focus_estimate)[0]
-
         return focus_estimate
 
     def fit_basis(self, basis, modes):
